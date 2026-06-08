@@ -229,3 +229,14 @@ python3 tools/import_nscripter_case.py --self-test
 godot --headless --path . --quit-after 120 -- --galsystem-narcissu-private-smoke
 ```
 
+## Next major phase handoff
+
+Phase 3 planning handoff has been added:
+
+```text
+docs/PHASE3_HANDOFF.md
+docs/PHASE3_AUTOPILOT_PROMPT.md
+```
+
+Phase 3 target: complete a local Godot runtime MVP for legally obtained Narcissu 1/2 while keeping all third-party scripts/assets private under ignored paths.
+
