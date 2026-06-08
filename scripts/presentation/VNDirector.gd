@@ -45,7 +45,7 @@ var _type_chars_per_second: float = 42.0
 var _auto_mode: bool = false
 var _skip_mode: bool = false
 var _auto_wait: float = 0.0
-var _last_status_message: String = "LMB/Space: 推进  Esc: 菜单  B: 历史  F1: 调试  F2: 流程  F5/F9: 快存/快读"
+var _last_status_message: String = "LMB/Space: 推进  Esc: 菜单  B: 历史  F1: 调试  F2: 流程  F5/F9: 快存/快读  M: 标题"
 var _menu_open: bool = false
 var _game_started: bool = false
 var _dialogue_backend: String = "galscript"
@@ -100,8 +100,14 @@ func _connect_runner() -> void:
 func _has_cmdline_flag(flag: String) -> bool:
 	return flag in OS.get_cmdline_args() or flag in OS.get_cmdline_user_args()
 
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _game_started and not title_panel.visible and not _is_pointer_over_button():
+			_handle_advance()
+			get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("advance_text"):
+	if event.is_action_pressed("advance_text") and not (event is InputEventMouseButton):
 		_handle_advance()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
@@ -121,6 +127,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_toggle_auto_mode()
 			KEY_S:
 				_toggle_skip_mode()
+			KEY_M:
+				_return_to_title()
 
 func _handle_advance() -> void:
 	if title_panel.visible:
@@ -321,6 +329,7 @@ func _build_system_menu() -> void:
 	vbox.add_child(_menu_button("开始 Dialogue Manager", func() -> void: _start_dialogue_manager_sample()))
 	vbox.add_child(_menu_button("保存", func() -> void: _open_save_load(SaveLoadMode.SAVE)))
 	vbox.add_child(_menu_button("读取", func() -> void: _open_save_load(SaveLoadMode.LOAD)))
+	vbox.add_child(_menu_button("返回主菜单 / Title", func() -> void: _return_to_title()))
 	vbox.add_child(_menu_button("Backlog", func() -> void: _toggle_backlog()))
 	vbox.add_child(_menu_button("Flow", func() -> void: _toggle_flow_panel()))
 	vbox.add_child(_menu_button("Debug", func() -> void: _toggle_debug_panel()))
@@ -429,8 +438,28 @@ func _menu_button(label: String, callback: Callable) -> Button:
 	button.pressed.connect(callback)
 	return button
 
+func _is_pointer_over_button() -> bool:
+	var control := get_viewport().gui_get_hovered_control()
+	while control != null:
+		if control is Button or control is LineEdit or control is TextEdit or control is OptionButton:
+			return true
+		control = control.get_parent() as Control
+	return false
+
+func _return_to_title() -> void:
+	_auto_mode = false
+	_skip_mode = false
+	_dialogue_backend = "galscript"
+	DialogueManagerAdapter.reset()
+	VNState.reset()
+	_close_overlays()
+	_clear_narcissu_stage()
+	_show_title()
+
 func _show_title() -> void:
 	_game_started = false
+	_auto_mode = false
+	_skip_mode = false
 	_stop_all_narcissu_media()
 	title_panel.visible = true
 	dialogue_panel.visible = false
@@ -1239,6 +1268,17 @@ func _run_smoke_test() -> void:
 	assert(title_panel.visible)
 	print("smoke: title flow visible")
 	_smoke_branch(0, "phone")
+	_start_new_game()
+	assert(_typing)
+	var mouse_event := InputEventMouseButton.new()
+	mouse_event.button_index = MOUSE_BUTTON_LEFT
+	mouse_event.pressed = true
+	_input(mouse_event)
+	assert(not _typing)
+	_input(mouse_event)
+	assert(not str(ScenarioRunner.get_current_line().get("text", "")).is_empty())
+	_return_to_title()
+	assert(title_panel.visible and not _game_started)
 	_smoke_branch(1, "calendar")
 	print("galsystem smoke ok")
 	get_tree().quit(0)
