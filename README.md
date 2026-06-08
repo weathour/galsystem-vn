@@ -1,158 +1,146 @@
-# galsystem
+# galsystem-vn
 
-Godot 4.6 ADV/Galgame skeleton for long-form games similar to *White Album* and *Steins;Gate*.
+**galsystem** is a Godot 4.6 ADV / visual-novel runtime skeleton for long-form branching stories. It combines a small self-built `.galscript` runner, a Dialogue Manager backend, centralized story state, save/load, backlog, auto/skip, phone/calendar route prototypes, and a Ren'Py/Dialogic-style presentation shell.
+
+This repository is public-demo safe: it does **not** include private third-party visual novel assets or private reference scripts.
 
 ## Current status
 
-Phase 1 targets an **ADV Core Vertical Slice**: a small but verifiable self-built system slice, not a final commercial VN engine.
+Phase 5 is focused on making the project understandable, runnable, and verifiable from a fresh public clone.
 
-Current status:
+Implemented now:
 
-- Self-built `.galscript` runner.
-- Title/start flow.
-- Dialogue UI with typewriter, advance, auto, skip, backlog.
-- System menu, save/load slots, quick save/load.
-- Debug panel and flow panel.
-- Centralized story state.
-- Phone/mail prototype for Steins;Gate-like triggers.
-- Calendar/affection prototype for White Album-like route conditions.
-- Static `.galscript` lint driven by `scenario/command_registry.json`.
-- Headless smoke test with deterministic branch and save/load assertions.
-- Dialogue Manager `.dialogue` backend with `scenario/dialogue_manager/chapter_01.dialogue` as the current DM short-chapter entry and a mutation bridge for bg/show/bgm/sfx, phone/mail, calendar/affection, route, worldline, TIPS, and CG commands.
-- Dialogue Manager mid-choice save/load regression.
+- Godot 4.6 project with `scenes/Main.tscn` as the runtime entry.
+- Player-facing title screen, dialogue window, quick menu, system menu, backlog, and save/load components under `scripts/ui/`.
+- Public `.galscript` demo at `scenario/common/prologue.galscript`.
+- Dialogue Manager demo at `scenario/dialogue_manager/chapter_01.dialogue`.
+- Centralized VN state: flags, variables, affection, route, chapter, day, worldline, backlog, CG/TIPS unlocks.
+- Save/load slots, quick save/load, and save metadata preview cards.
+- Phone/mail and calendar/affection route-condition prototypes.
+- Headless smoke tests for public demo, Dialogue Manager, invalid saves, Narcissu compatibility entry points, and screenshot flow generation.
+- GitHub Actions smoke workflow.
 
-Dialogue Manager v3.10.4 is now imported as a second backend. The self-built `ScenarioRunner.gd` remains available as the fallback path while `.dialogue` scenes are promoted into the main workflow.
+## What is intentionally not included
 
-## Run
+The project contains compatibility hooks and local tooling for studying private reference material, but this public repository does not distribute any copyrighted third-party VN content.
 
-Open this folder with Godot 4.6.2+ or run:
+Excluded by `.gitignore`:
+
+```text
+reference_private/
+external_reference/
+```
+
+Title-screen entries such as `Narcissu 1 Private` and `Narcissu 2 Private` are disabled in a fresh public clone until local private reference data is installed outside Git tracking.
+
+## Requirements
+
+- Godot `4.6.2-stable` or newer 4.6.x build.
+- Python 3.10+ for tooling and lint smoke tests.
+
+## Run the public demo
 
 ```bash
+git clone https://github.com/weathour/galsystem-vn.git
+cd galsystem-vn
 godot --path .
 ```
+
+Use the title menu:
+
+- `Start Demo` for the public `.galscript` demo.
+- `Start Dialogue Manager Demo` for the Dialogue Manager-backed short chapter.
+- Private compatibility entries remain disabled unless local private reference data exists.
 
 ## Controls
 
 - Left click / Space: advance text; if typewriter is active, reveal current line first.
-- Esc: system menu.
-- F1: debug panel.
+- Right click / Esc: system menu.
+- Quick menu: Backlog, Auto, Skip, Save, Load, Q.Save, Q.Load, Config, Title.
+- F1: developer debug panel.
 - F2: flow panel.
 - F5: quick save slot 1.
 - F9: quick load slot 1.
 - B: backlog.
 - A: auto mode.
 - S: skip mode.
+- M: return to title.
 
 ## Validation
 
-Static scenario lint:
+Run local tool checks:
 
 ```bash
+python3 tools/import_nscripter_case.py --self-test
+python3 tools/build_narcissu_manifest.py --self-test
 python3 tools/lint_galscript.py scenario
 python3 tools/lint_galscript.py --self-test
 ```
 
-Expected output:
-
-```text
-galscript lint ok (1 files)
-galscript lint self-test ok
-```
-
-Godot startup smoke:
+Run Godot smoke tests:
 
 ```bash
 godot --headless --path . --quit-after 3
-```
-
-Full Phase-1 vertical-slice smoke:
-
-```bash
 godot --headless --path . --quit-after 120 -- --galsystem-smoke
-```
-
-Expected output includes:
-
-```text
-smoke: title flow visible
-smoke: phone branch mail->read->reply->worldline/tips/cg ok
-smoke: calendar/affection branch route lock ok
-galsystem smoke ok
-```
-
-The full smoke test asserts:
-
-- title flow is visible before starting;
-- save/load restores the current line, choice state, day, and worldline before branch selection;
-- phone branch performs mail received -> read -> reply -> worldline/TIPS/CG -> branch observed;
-- calendar branch performs day advance -> affection threshold -> scheduled event -> route lock;
-- flow tracking records visited labels and choices.
-
-## Script commands
-
-Example file: `scenario/common/prologue.galscript`.
-
-```text
-label start
-chapter prologue
-day 1
-worldline 1.000000
-bg winter_street
-bgm winter_theme
-show kazusa neutral center
-say 冬马|你迟到了。
-narr|十二月的风从校门口穿过。
-schedule_event music_rehearsal 2 kazusa 3 visited_music_room
-mail sg001 unknown 世界线变动率 正文内容
-choice 接电话->phone_call|去音乐室->music_room
-read_mail sg001
-reply_mail sg001 el_psy_congroo
-set_flag answered_phone true
-set_var phone_keyword el_psy_congroo
-affection kazusa +1
-advance_day 1
-if_flag answered_phone sg_note white_album_note
-if_var phone_keyword el_psy_congroo true_label false_label
-if_affection kazusa 3 affection_ready affection_low
-if_calendar_event music_rehearsal event_ready event_miss
-cg first_phone_trigger
-tip worldline_tips
-clear_chars
-jump ending
-end
-```
-
-## Key architecture
-
-- `autoload/VNState.gd`: story flags, variables, affection, route, day, worldline, backlog, CG/TIPS.
-- `autoload/ScenarioRunner.gd`: minimal text runner and checkpointing.
-- `autoload/SaveSystem.gd`: JSON save/load for state, runner, presentation, phone, calendar, flowchart.
-- `autoload/FlowchartSystem.gd`: lightweight visited-label/choice tracker.
-- `scripts/systems/PhoneSystem.gd`: phone/mail prototype state.
-- `scripts/systems/CalendarSystem.gd`: day/event/affection scheduler state.
-- `scripts/presentation/VNDirector.gd`: presentation shell and command dispatch.
-- `scenario/command_registry.json`: shared command contract used by lint and checked against Dialogue Manager mutations.
-
-## Phase 2 follow-ups
-
-- Use `scenario/command_registry.json` as the command-contract source of truth and extend it into docs/runtime checks.
-- Split `VNDirector.gd` into scene components (`TitleMenu`, `DialogueBox`, `ChoiceMenu`, `SaveLoadUI`, `DebugPanel`, `FlowPanel`).
-- Keep extending `scenario/command_registry.json` so `.galscript`, Dialogue Manager, lint, docs, and smoke tests cannot drift.
-- Expand phone UI and calendar/event UI beyond the current prototype panels.
-
-## Dialogue Manager integration update
-
-Dialogue Manager v3.10.4 is now installed under `addons/dialogue_manager/` and available as a second backend through `DialogueManagerAdapter.gd`. Its mutation bridge can now drive VN presentation/system commands from `.dialogue` files. See `docs/DIALOGUE_MANAGER_INTEGRATION.md`.
-
-Additional validation:
-
-```bash
-godot --headless --editor --path . --quit-after 10
 godot --headless --path . --quit-after 120 -- --galsystem-dm-smoke
+godot --headless --path . --quit-after 120 -- --galsystem-narcissu-private-smoke
+godot --headless --path . --quit-after 120 -- --galsystem-narcissu-local-smoke
+godot --headless --path . --quit-after 120 -- --galsystem-qa-invalid-save
+godot --headless --path . --quit-after 120 -- --galsystem-public-title-smoke
+godot --headless --path . --quit-after 120 -- --galsystem-screenshot-smoke
 ```
 
-Expected key output:
+Notes:
+
+- `--galsystem-dm-smoke` may ask for one editor import pass on a fresh checkout. If needed, run:
+
+  ```bash
+  godot --headless --editor --path . --quit-after 10
+  ```
+
+- Narcissu private/local smokes are public-safe: they pass when private local data exists and skip cleanly when it does not.
+- In pure `--headless` dummy rendering, screenshot smoke validates UI flow and writes fallback PNGs under `/tmp`. Use a graphical environment for real rendered screenshots.
+
+Expected screenshot outputs:
 
 ```text
-dialogue manager smoke ok
+/tmp/galsystem-title.png
+/tmp/galsystem-gameplay.png
+/tmp/galsystem-system-menu.png
+/tmp/galsystem-backlog.png
+/tmp/galsystem-save-load.png
 ```
+
+## Architecture overview
+
+Key runtime layers:
+
+- `autoload/VNState.gd` — canonical story state.
+- `autoload/ScenarioRunner.gd` — self-built `.galscript` runner and checkpoint source.
+- `scripts/systems/DialogueManagerAdapter.gd` — Dialogue Manager backend adapter.
+- `autoload/SaveSystem.gd` — JSON save/load and safe slot metadata reads.
+- `scripts/presentation/VNDirector.gd` — runtime orchestrator and command dispatch.
+- `scripts/ui/*.gd` — player-facing VN UI components.
+- `scripts/systems/PhoneSystem.gd` and `CalendarSystem.gd` — route-condition prototypes.
+- `autoload/FlowchartSystem.gd` — lightweight debug/flow tracking.
+
+See `docs/ARCHITECTURE.md` for details.
+
+## Documentation
+
+- `PRODUCT.md` — product/design register for the VN presentation layer.
+- `docs/ARCHITECTURE.md` — current runtime architecture.
+- `docs/ROADMAP.md` — planned phases and future work.
+- `docs/PUBLICATION_CHECKLIST.md` — public-release safety checklist.
+- `docs/DIALOGUE_MANAGER_INTEGRATION.md` — Dialogue Manager backend notes.
+- `docs/NARCISSU_CASE_STUDY.md` — compatibility-study notes without distributing private data.
+
+## Third-party code
+
+Dialogue Manager is vendored under `addons/dialogue_manager/` with its own license file at `addons/dialogue_manager/LICENSE`.
+
+## License
+
+Project code is released under the MIT License. See `LICENSE`.
+
+Third-party assets, VN scripts, or private reference materials are not licensed by this repository and are not distributed here.

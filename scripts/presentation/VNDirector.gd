@@ -78,6 +78,8 @@ func _ready() -> void:
 		call_deferred("_run_smoke_test")
 	elif _has_cmdline_flag("--galsystem-screenshot-smoke"):
 		call_deferred("_run_screenshot_smoke")
+	elif _has_cmdline_flag("--galsystem-public-title-smoke"):
+		call_deferred("_run_public_title_smoke")
 	elif _has_cmdline_flag("--galsystem-qa-invalid-save"):
 		call_deferred("_run_invalid_save_qa")
 	elif _has_cmdline_flag("--galsystem-dm-smoke"):
@@ -383,6 +385,17 @@ func _build_title_panel() -> void:
 	title_panel.connect("debug_requested", Callable(self, "_toggle_debug_panel"))
 	add_child(title_panel)
 	_layout_title_panel()
+	_refresh_title_availability()
+
+func _refresh_title_availability() -> void:
+	if title_panel == null or not title_panel.has_method("set_public_availability"):
+		return
+	title_panel.call(
+		"set_public_availability",
+		FileAccess.file_exists(NARCISSU1_PRIVATE_SCRIPT),
+		FileAccess.file_exists(NARCISSU2_PRIVATE_SCRIPT),
+		SaveSystem.has_slot(1)
+	)
 
 func _start_narcissu1_private() -> void:
 	_start_private_galscript(NARCISSU1_PRIVATE_SCRIPT, "gp32_image")
@@ -449,6 +462,7 @@ func _return_to_title() -> void:
 
 func _show_title() -> void:
 	_layout_title_panel()
+	_refresh_title_availability()
 	_game_started = false
 	_auto_mode = false
 	_skip_mode = false
@@ -895,6 +909,7 @@ func _refresh_save_load_panel() -> void:
 func _on_save_load_slot_selected(slot_id: int) -> void:
 	if _save_load_mode == SaveLoadMode.SAVE:
 		SaveSystem.save_slot(slot_id, _presentation_snapshot())
+		_refresh_title_availability()
 		_set_status("Saved to Slot %d" % slot_id)
 	else:
 		_load_slot(slot_id)
@@ -917,6 +932,7 @@ func _quick_save() -> void:
 	if not _game_started:
 		return
 	SaveSystem.save_slot(1, _presentation_snapshot())
+	_refresh_title_availability()
 	_set_status("已快速保存到 Slot 1")
 
 func _quick_load() -> void:
@@ -1198,6 +1214,32 @@ func _advance_until_presented_text(max_steps: int) -> void:
 		if ScenarioRunner.is_finished():
 			return
 		ScenarioRunner.next()
+
+func _run_public_title_smoke() -> void:
+	_show_title()
+	await get_tree().process_frame
+	assert(title_panel.visible)
+	assert(title_panel.has_method("get_button_snapshot"))
+	var snapshot: Dictionary = title_panel.call("get_button_snapshot")
+	assert(snapshot.has("demo") and not bool(snapshot["demo"].get("disabled", true)))
+	assert(snapshot.has("dialogue_manager") and not bool(snapshot["dialogue_manager"].get("disabled", true)))
+	assert(snapshot.has("narcissu1"))
+	assert(snapshot.has("narcissu2"))
+	assert(snapshot.has("continue"))
+	var narcissu1_missing := not FileAccess.file_exists(NARCISSU1_PRIVATE_SCRIPT)
+	var narcissu2_missing := not FileAccess.file_exists(NARCISSU2_PRIVATE_SCRIPT)
+	var slot1_missing := not SaveSystem.has_slot(1)
+	assert(bool(snapshot["narcissu1"].get("disabled", false)) == narcissu1_missing)
+	assert(bool(snapshot["narcissu2"].get("disabled", false)) == narcissu2_missing)
+	assert(bool(snapshot["continue"].get("disabled", false)) == slot1_missing)
+	if narcissu1_missing:
+		assert(str(snapshot["narcissu1"].get("text", "")).contains("not installed"))
+	if narcissu2_missing:
+		assert(str(snapshot["narcissu2"].get("text", "")).contains("not installed"))
+	if slot1_missing:
+		assert(str(snapshot["continue"].get("text", "")).contains("empty"))
+	print("public title smoke ok")
+	get_tree().quit(0)
 
 func _run_invalid_save_qa() -> void:
 	DirAccess.make_dir_recursive_absolute("user://saves")
