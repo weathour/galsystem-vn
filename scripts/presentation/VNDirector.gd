@@ -4,7 +4,7 @@ extends Control
 ## later be replaced by Dialogue Manager or another adapter.
 
 const START_SCRIPT := "res://scenario/common/prologue.galscript"
-const DM_SAMPLE_SCRIPT := "res://scenario/dialogue_manager/prologue.dialogue"
+const DM_MAIN_SCRIPT := "res://scenario/dialogue_manager/chapter_01.dialogue"
 const SAVE_SLOT_COUNT := 6
 
 var background: ColorRect
@@ -405,7 +405,7 @@ func _start_dialogue_manager_sample() -> void:
 	dialogue_panel.visible = true
 	_game_started = true
 	FlowchartSystem.visit_label("dm:start")
-	var line := await DialogueManagerAdapter.start(DM_SAMPLE_SCRIPT, "start")
+	var line := await DialogueManagerAdapter.start(DM_MAIN_SCRIPT, "start")
 	_present_dialogue_manager_line(line)
 
 func _advance_dialogue_manager() -> void:
@@ -846,10 +846,10 @@ func _run_dialogue_manager_smoke() -> void:
 func _smoke_dialogue_manager_branch(choice_index: int, branch_name: String) -> void:
 	await _start_dialogue_manager_sample()
 	assert(_dialogue_backend == "dialogue_manager")
-	assert(_current_full_text.contains("Dialogue Manager"))
-	assert(background_label.text == "bg: dm_lab_evening")
+	assert(_current_full_text.contains("Chapter 01"))
+	assert(background_label.text == "bg: dm_winter_school_gate")
 	assert(choice_box.visible == false)
-	await _advance_dialogue_manager()
+	await _advance_dialogue_manager_until_choice(16)
 	assert(choice_box.visible)
 	var before_save := _dm_critical_snapshot()
 	assert(SaveSystem.save_slot(2, _presentation_snapshot()))
@@ -942,6 +942,13 @@ func _advance_until_choice(max_steps: int) -> void:
 		if ScenarioRunner.is_waiting_for_choice() or ScenarioRunner.is_finished():
 			return
 		ScenarioRunner.next()
+
+func _advance_dialogue_manager_until_choice(max_steps: int) -> void:
+	for step in range(max_steps):
+		if choice_box.visible:
+			return
+		await _advance_dialogue_manager()
+	assert(choice_box.visible)
 
 func _advance_until_finished(max_steps: int) -> void:
 	for step in range(max_steps):

@@ -18,7 +18,7 @@ Current status:
 - Calendar/affection prototype for White Album-like route conditions.
 - Static `.galscript` lint.
 - Headless smoke test with deterministic branch and save/load assertions.
-- Dialogue Manager `.dialogue` backend with mutation bridge for bg/show/bgm/sfx, phone/mail, calendar/affection, route, worldline, TIPS, and CG commands.
+- Dialogue Manager `.dialogue` backend with `scenario/dialogue_manager/chapter_01.dialogue` as the current DM short-chapter entry and a mutation bridge for bg/show/bgm/sfx, phone/mail, calendar/affection, route, worldline, TIPS, and CG commands.
 - Dialogue Manager mid-choice save/load regression.
 
 Dialogue Manager v3.10.4 is now imported as a second backend. The self-built `ScenarioRunner.gd` remains available as the fallback path while `.dialogue` scenes are promoted into the main workflow.
@@ -134,7 +134,7 @@ end
 
 ## Phase 2 follow-ups
 
-- Promote one real chapter scene from `.galscript` into `.dialogue` and make it the default start path once parity is proven.
+- Harden shared command contracts now that `.galscript` and Dialogue Manager both drive the same VN shell.
 - Split `VNDirector.gd` into scene components (`TitleMenu`, `DialogueBox`, `ChoiceMenu`, `SaveLoadUI`, `DebugPanel`, `FlowPanel`).
 - Extract scenario command contracts into a shared registry/adapter layer so `.galscript`, Dialogue Manager, lint, docs, and smoke tests cannot drift.
 - Expand phone UI and calendar/event UI beyond the current prototype panels.

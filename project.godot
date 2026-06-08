@@ -49,4 +49,4 @@ advance_text={
 
 [internationalization]
 
-locale/translations_pot_files=PackedStringArray("res://scenario/dialogue_manager/prologue.dialogue")
+locale/translations_pot_files=PackedStringArray("res://scenario/dialogue_manager/prologue.dialogue", "res://scenario/dialogue_manager/chapter_01.dialogue")

@@ -128,7 +128,7 @@ These are accepted Phase-1 limitations, not current blockers:
 2. Command contracts are shared by convention across runner/director/lint rather than a central registry.
 3. Phone UI is functional as a prototype, not a final phone interface.
 4. Flow panel is debug visibility, not a full route-map editor.
-5. Dialogue Manager is imported and smoke-tested, but the main real chapter still needs migration from `.galscript` to `.dialogue`.
+5. Dialogue Manager is imported and smoke-tested; `scenario/dialogue_manager/chapter_01.dialogue` is the current DM short-chapter entry, while `.galscript` remains fallback.
 6. Art/audio assets are placeholders or labels, not final production assets.
 
 ## Recommended Phase 2
@@ -144,8 +144,8 @@ These are accepted Phase-1 limitations, not current blockers:
 3. Extract a shared command registry to reduce drift between runner, director, lint, and documentation.
 4. Expand `FlowchartSystem` into a chapter/route map prototype.
 5. Add a more complete event scheduler for calendar + affection + flags + route conditions.
-6. Migrate one real short chapter into `.dialogue` and promote it only after equivalent validation passes.
-7. Continue hardening Dialogue Manager save/load beyond the current mid-choice smoke.
+6. Continue hardening Dialogue Manager save/load beyond the current mid-choice smoke.
+7. Extract command contracts and begin splitting UI components.
 
 ## Safe continuation rule
 

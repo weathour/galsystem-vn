@@ -23,6 +23,8 @@ addons/dialogue_manager/
 scripts/systems/DialogueManagerAdapter.gd
 scenario/dialogue_manager/prologue.dialogue
 scenario/dialogue_manager/prologue.dialogue.import
+scenario/dialogue_manager/chapter_01.dialogue
+scenario/dialogue_manager/chapter_01.dialogue.import
 ```
 
 `project.godot` includes:
@@ -37,7 +39,7 @@ DialogueManagerAdapter="*res://scripts/systems/DialogueManagerAdapter.gd"
 The title menu has two start paths:
 
 1. `Start .galscript` — existing self-built runner.
-2. `Start Dialogue Manager` — Dialogue Manager sample through `DialogueManagerAdapter`.
+2. `Start Dialogue Manager` — Dialogue Manager `chapter_01.dialogue` short chapter through `DialogueManagerAdapter`.
 
 `DialogueManagerAdapter.gd` calls:
 
@@ -142,19 +144,18 @@ qa: invalid save payload rejected
 
 ## Current limitations
 
-- The main Phase-1 sample still uses `.galscript`; Dialogue Manager has a separate command-bridge sample.
+- `.galscript` remains the fallback Phase-1 sample. Dialogue Manager now has `chapter_01.dialogue` as a short chapter entry and `prologue.dialogue` as a smaller command-bridge sample.
 - Dialogue Manager save/load now stores resource path, next id, active flag, current displayed line, current responses, and presentation state; the smoke test covers mid-choice restore. It still needs broader coverage for long-scene mid-line and branch-after-save cases.
 - `VNDirector.gd` still owns command execution; Phase 2 should split UI/presentation components.
 - Command bridge is code-based rather than generated from a central registry.
 
 ## Recommended next step
 
-Proceed with **Phase 2C: migrate one real short scene to `.dialogue` and promote it toward the default start path**.
+Proceed with **Phase 2D: harden command contracts and split UI/presentation boundaries**.
 
 Acceptance for the next step:
 
-1. A real scene, not just the integration sample, is written in `.dialogue`.
-2. It uses presentation mutations for bg/show/hide/bgm/sfx.
-3. It uses either the phone chain or calendar/affection chain, ideally both in separate branches.
-4. It has save/load smoke covering Dialogue Manager mid-scene, mid-choice, and branch-after-save state.
-5. `.galscript` remains as fallback until the DM scene passes equivalent validation.
+1. A shared command registry describes every scenario command and Dialogue Manager mutation.
+2. `ScenarioRunner`, `DialogueManagerAdapter`, `VNDirector`, lint, and docs are generated from or checked against that registry.
+3. Save/load smoke also covers Dialogue Manager branch-after-save state.
+4. The first UI split extracts at least `DialogueBox` or `ChoiceMenu` without changing smoke behavior.

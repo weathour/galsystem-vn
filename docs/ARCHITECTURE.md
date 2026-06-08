@@ -4,7 +4,7 @@
 
 ## Phase 1 决策
 
-Phase 1 完成的是 **ADV Core Vertical Slice**。当前已进入 Phase 2：Dialogue Manager v3.10.4 已作为第二后端接入，`.galscript` 保留为可回退路径；下一步是把真实章节逐步迁移到 `.dialogue`，同时保持存读档、手机、日程、路线和 flow 追踪可验证。
+Phase 1 完成的是 **ADV Core Vertical Slice**。当前已进入 Phase 2：Dialogue Manager v3.10.4 已作为第二后端接入，`.galscript` 保留为可回退路径；当前 `scenario/dialogue_manager/chapter_01.dialogue` 已作为 DM 短章节入口；下一步是继续迁移更多真实章节，同时保持存读档、手机、日程、路线和 flow 追踪可验证。
 
 ## 分层
 
@@ -53,12 +53,11 @@ galsystem smoke ok
 
 ## 后续推荐顺序
 
-1. 把一个真实短章节从 `.galscript` 迁移到 `.dialogue`，并让 DM smoke 覆盖章节中段、选择肢前、分支后存读档。
-2. 抽出命令注册表/命令执行层，减少 `ScenarioRunner`、`DialogueManagerAdapter`、`VNDirector`、lint 和文档之间的约定漂移。
-3. 把当前代码生成 UI 逐步拆为 `DialogueBox.tscn`、`ChoiceMenu.tscn`、`SystemMenu.tscn`、`SaveLoadUI.tscn`。
-4. 扩展 `PhoneUI.tscn`：短信收件箱、电话接听、关键词回复。
-5. 实现更正式的 `FlowchartSystem` UI：章节跳转和路线图，但保持 Phase-2 范围。
-6. 扩展 `EventScheduler`：日期、好感度、flag、路线状态共同触发事件。
+1. 抽出命令注册表/命令执行层，减少 `ScenarioRunner`、`DialogueManagerAdapter`、`VNDirector`、lint 和文档之间的约定漂移。
+2. 把当前代码生成 UI 逐步拆为 `DialogueBox.tscn`、`ChoiceMenu.tscn`、`SystemMenu.tscn`、`SaveLoadUI.tscn`。
+3. 扩展 `PhoneUI.tscn`：短信收件箱、电话接听、关键词回复。
+4. 实现更正式的 `FlowchartSystem` UI：章节跳转和路线图，但保持 Phase-2 范围。
+5. 扩展 `EventScheduler`：日期、好感度、flag、路线状态共同触发事件。
 
 ## Phase 2 follow-ups
 

@@ -1,0 +1,45 @@
+~ start
+do set_var("dm_scene_id", "chapter_01")
+do bg("dm_winter_school_gate")
+do bgm("dm_winter_theme")
+do show("kazusa", "neutral", "center")
+系统: Chapter 01 / Dialogue Manager 主线短章开始。
+冬马: 你迟到了。
+do show("setsuna", "smile", "left")
+雪菜: 没关系，今天只是系统迁移后的第一场排练。
+do set_flag("dm_ch01_met_heroines", true)
+do add_affection("setsuna", 1)
+do add_affection("kazusa", 1)
+do schedule_event("dm_ch01_music_rehearsal", 2, "kazusa", 3, "dm_visited_music_room")
+do mail_receive("dm_sg001", "unknown", "世界线变动率", "如果你看到这封邮件，说明 Dialogue Manager 主线短章已经接管手机触发器。")
+系统: 手机震动了一下。屏幕亮起，像是某条世界线从这里开始偏移。
+- 接电话并回复邮件 => phone_path
+- 先放着，去音乐室 => calendar_path
+
+~ phone_path
+do phone_open("inbox")
+do mail_read("dm_sg001")
+do mail_reply("dm_sg001", "el_psy_congroo")
+do set_flag("dm_phone_branch_observed", true)
+do set_var("dm_phone_keyword", "el_psy_congroo")
+do set_worldline("1.048596")
+do bg("dm_lab_evening")
+do sfx("phone_pickup")
+do show("okabe", "serious", "center")
+do unlock_tip("dm_worldline_tips")
+do unlock_cg("dm_phone_trigger")
+系统: 这里是《命运石之门》式手机链：邮件接收、阅读、回复、世界线变化、TIPS/CG 解锁。
+do phone_close()
+=> END
+
+~ calendar_path
+do set_flag("dm_visited_music_room", true)
+do bg("dm_music_room")
+do hide("left")
+do show("kazusa", "piano", "center")
+do add_affection("kazusa", 2)
+do advance_day(1)
+do lock_route("kazusa")
+do set_flag("dm_calendar_branch_observed", true)
+系统: 这里是《白色相簿》式日程链：日期推进、好感度阈值、事件排程和路线锁定。
+=> END
