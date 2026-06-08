@@ -1,7 +1,6 @@
 extends Node
-## Minimal textual scenario runner.
-## It is deliberately small: replace or adapt it to Dialogue Manager/Konado later while
-## keeping the rest of the VN shell intact.
+## Minimal textual scenario runner with a small compatibility VM for converted
+## NScripter/PONScripter case-study scripts.
 ##
 ## Script grammar examples:
 ##   label start
@@ -34,11 +33,15 @@ var _current_text: String = ""
 var _current_choices: Array[Dictionary] = []
 var _finished: bool = false
 var _last_choice_label: String = ""
+var _num_vars: Dictionary = {}
+var _str_vars: Dictionary = {}
+var _call_stack: Array[int] = []
 
 func start(path: String, label: String = "start") -> bool:
 	_path = path
 	if not _load(path):
 		return false
+	_reset_vm()
 	_jump_to_label(label)
 	_waiting_for_choice = false
 	_current_choices.clear()
@@ -81,6 +84,13 @@ func next() -> void:
 				if args.size() > 0:
 					_jump_to_label(str(args[0]))
 				continue
+			"call":
+				if args.size() > 0:
+					_call_label(str(args[0]))
+				continue
+			"return":
+				_return_from_call()
+				continue
 			"if_flag":
 				if args.size() >= 3:
 					_jump_to_label(str(args[1]) if VNState.get_flag(str(args[0])) else str(args[2]))
@@ -89,6 +99,16 @@ func next() -> void:
 				if args.size() >= 4:
 					var actual: String = str(VNState.get_var(str(args[0]), ""))
 					_jump_to_label(str(args[2]) if actual == str(args[1]) else str(args[3]))
+				continue
+			"if_expr":
+				if args.size() >= 3 and _eval_expr(str(args[0])):
+					if str(args[1]) == "gosub":
+						_call_label(str(args[2]))
+					else:
+						_jump_to_label(str(args[2]))
+				continue
+			"tablegoto":
+				_handle_tablegoto(args)
 				continue
 			"if_affection":
 				if args.size() >= 4:
@@ -107,6 +127,9 @@ func next() -> void:
 			"set_var":
 				if args.size() >= 2:
 					VNState.set_var(str(args[0]), " ".join(args.slice(1)))
+				continue
+			"set_value", "add_value", "sub_value", "mul_value":
+				_handle_value_op(op, args)
 				continue
 			"affection":
 				if args.size() >= 2:
@@ -127,6 +150,9 @@ func next() -> void:
 			"worldline":
 				if args.size() > 0:
 					VNState.worldline = str(args[0])
+				continue
+			"wait":
+				command_requested.emit(op, args)
 				continue
 			"end":
 				_finish()
@@ -165,6 +191,13 @@ func is_waiting_for_choice() -> bool:
 func is_finished() -> bool:
 	return _finished
 
+func get_compatibility_state() -> Dictionary:
+	return {
+		"num_vars": _num_vars.duplicate(true),
+		"str_vars": _str_vars.duplicate(true),
+		"call_stack": _call_stack.duplicate(),
+	}
+
 func get_checkpoint() -> Dictionary:
 	return {
 		"path": _path,
@@ -176,6 +209,7 @@ func get_checkpoint() -> Dictionary:
 		"current_choices": _current_choices.duplicate(true),
 		"last_choice_label": _last_choice_label,
 		"finished": _finished,
+		"compatibility": get_compatibility_state(),
 	}
 
 func restore_checkpoint(data: Dictionary) -> bool:
@@ -196,6 +230,7 @@ func restore_checkpoint(data: Dictionary) -> bool:
 			_current_choices.append(choice.duplicate(true))
 	_last_choice_label = str(data.get("last_choice_label", ""))
 	_finished = bool(data.get("finished", false))
+	_restore_compatibility(data.get("compatibility", {}))
 	return true
 
 func _present_line(speaker: String, text: String) -> void:
@@ -244,14 +279,53 @@ func _parse_line(line: String) -> Dictionary:
 		return {"op": "narr", "args": [line.substr(5).strip_edges()]}
 	if line.begins_with("choice "):
 		return {"op": "choice", "args": [line.substr(7).strip_edges()]}
-	var tokens := line.split(" ", false)
+	var tokens := _split_tokens(line)
 	if tokens.is_empty():
 		return {}
-	var op := tokens[0]
+	var op := str(tokens[0])
 	var args: Array = []
 	for i in range(1, tokens.size()):
 		args.append(tokens[i])
 	return {"op": op, "args": args}
+
+func _split_tokens(line: String) -> Array:
+	var result: Array = []
+	var current := ""
+	var in_quote := false
+	var escaped := false
+	for i in range(line.length()):
+		var ch := line[i]
+		if escaped:
+			current += ch
+			escaped = false
+			continue
+		if ch == "\\" and in_quote:
+			current += ch
+			escaped = true
+			continue
+		if ch == '"':
+			current += ch
+			in_quote = not in_quote
+			continue
+		if ch == " " or ch == "\t":
+			if in_quote:
+				current += ch
+			elif not current.is_empty():
+				result.append(_decode_token(current))
+				current = ""
+		else:
+			current += ch
+	if not current.is_empty():
+		result.append(_decode_token(current))
+	return result
+
+func _decode_token(token: String) -> Variant:
+	if token.begins_with('"') and token.ends_with('"'):
+		var parsed: Variant = JSON.parse_string(token)
+		if parsed != null:
+			return parsed
+		return token.trim_prefix('"').trim_suffix('"')
+	return token
 
 func _parse_choices(args: Array) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
@@ -270,11 +344,111 @@ func _jump_to_label(label: String) -> void:
 	_record_label(label)
 	_index = int(_labels[label]) + 1
 
+func _call_label(label: String) -> void:
+	if not _labels.has(label):
+		push_error("ScenarioRunner: missing call label %s" % label)
+		return
+	_call_stack.append(_index)
+	_jump_to_label(label)
+
+func _return_from_call() -> void:
+	if _call_stack.is_empty():
+		return
+	_index = int(_call_stack.pop_back())
+
 func _record_label(label: String) -> void:
 	_last_label = label
 	if has_node("/root/FlowchartSystem"):
 		FlowchartSystem.visit_label(label)
 	label_changed.emit(label)
+
+func _handle_value_op(op: String, args: Array) -> void:
+	if args.size() < 2:
+		return
+	var name := _var_name(str(args[0]))
+	var raw_value: Variant = args[1]
+	var value: Variant = _value_for_token(raw_value)
+	if op == "set_value":
+		if typeof(value) == TYPE_STRING and not str(value).is_valid_float():
+			_str_vars[name] = str(value)
+		else:
+			_num_vars[name] = int(value)
+		return
+	var current := int(_num_vars.get(name, 0))
+	var numeric := int(value) if str(value).is_valid_int() or typeof(value) in [TYPE_INT, TYPE_FLOAT] else 0
+	match op:
+		"add_value":
+			_num_vars[name] = current + numeric
+		"sub_value":
+			_num_vars[name] = current - numeric
+		"mul_value":
+			_num_vars[name] = current * numeric
+
+func _handle_tablegoto(args: Array) -> void:
+	if args.size() < 2:
+		return
+	var index_value := int(_num_vars.get(_var_name(str(args[0])), 0))
+	var label_index := clampi(index_value, 0, args.size() - 2)
+	_jump_to_label(str(args[label_index + 1]))
+
+func _eval_expr(expr: String) -> bool:
+	if expr.contains("&&"):
+		for part in expr.split("&&", false):
+			if not _eval_expr(part.strip_edges()):
+				return false
+		return true
+	if expr.contains("||"):
+		for part in expr.split("||", false):
+			if _eval_expr(part.strip_edges()):
+				return true
+		return false
+	for op in [">=", "<=", "!=", "==", "<>", ">", "<"]:
+		var idx := expr.find(op)
+		if idx >= 0:
+			var left: Variant = _value_for_token(expr.substr(0, idx).strip_edges())
+			var right: Variant = _value_for_token(expr.substr(idx + op.length()).strip_edges())
+			return _compare_values(left, right, op)
+	return bool(int(_value_for_token(expr)))
+
+func _compare_values(left: Variant, right: Variant, op: String) -> bool:
+	var left_num := int(left) if str(left).is_valid_int() or typeof(left) in [TYPE_INT, TYPE_FLOAT] else 0
+	var right_num := int(right) if str(right).is_valid_int() or typeof(right) in [TYPE_INT, TYPE_FLOAT] else 0
+	match op:
+		">=": return left_num >= right_num
+		"<=": return left_num <= right_num
+		"!=", "<>": return str(left) != str(right)
+		"==": return str(left) == str(right)
+		">": return left_num > right_num
+		"<": return left_num < right_num
+	return false
+
+func _value_for_token(token: Variant) -> Variant:
+	var text := str(token).strip_edges()
+	if text.begins_with("$"):
+		return _str_vars.get(_var_name(text), "")
+	if text.begins_with("%"):
+		return _num_vars.get(_var_name(text), 0)
+	if text.is_valid_int():
+		return int(text)
+	return text.trim_prefix('"').trim_suffix('"')
+
+func _var_name(token: String) -> String:
+	var name := token.strip_edges()
+	if name.begins_with("%") or name.begins_with("$"):
+		name = name.substr(1)
+	return name
+
+func _reset_vm() -> void:
+	_num_vars.clear()
+	_str_vars.clear()
+	_call_stack.clear()
+
+func _restore_compatibility(data: Dictionary) -> void:
+	_num_vars = data.get("num_vars", {}).duplicate(true)
+	_str_vars = data.get("str_vars", {}).duplicate(true)
+	_call_stack.clear()
+	for item in data.get("call_stack", []):
+		_call_stack.append(int(item))
 
 func _parse_bool(value: String) -> bool:
 	return value.to_lower() in ["true", "1", "yes", "on"]

@@ -8,10 +8,18 @@ const DM_MAIN_SCRIPT := "res://scenario/dialogue_manager/chapter_01.dialogue"
 const NARCISSU1_PRIVATE_SCRIPT := "res://reference_private/narcissu/generated/narcissu1_gp32.galscript"
 const NARCISSU2_PRIVATE_SCRIPT := "res://reference_private/narcissu/generated/narcissu2_haeleth.galscript"
 const SAVE_SLOT_COUNT := 6
+const NarcissuCommandExecutor := preload("res://scripts/systems/NarcissuCommandExecutor.gd")
+const NarcissuRuntimeProfile := preload("res://scripts/systems/NarcissuRuntimeProfile.gd")
 
 var background: ColorRect
+var background_texture: TextureRect
 var background_label: Label
+var narcissu_stage: Control
+var bgm_player: AudioStreamPlayer
+var voice_player: AudioStreamPlayer
+var sfx_players: Array[AudioStreamPlayer] = []
 var character_slots: Dictionary = {}
+var narcissu_sprite_slots: Dictionary = {}
 var title_panel: PanelContainer
 var dialogue_panel: PanelContainer
 var speaker_label: Label
@@ -41,6 +49,8 @@ var _last_status_message: String = "LMB/Space: 推进  Esc: 菜单  B: 历史  F
 var _menu_open: bool = false
 var _game_started: bool = false
 var _dialogue_backend: String = "galscript"
+var _narcissu_executor: RefCounted
+var _last_media_status: Dictionary = {}
 
 enum SaveLoadMode { SAVE, LOAD }
 var _save_load_mode: SaveLoadMode = SaveLoadMode.SAVE
@@ -48,6 +58,8 @@ var _save_load_mode: SaveLoadMode = SaveLoadMode.SAVE
 func _ready() -> void:
 	_validate_extension_scripts()
 	_build_ui()
+	_build_audio_players()
+	_narcissu_executor = NarcissuCommandExecutor.new(self)
 	_connect_runner()
 	_show_title()
 	if _has_cmdline_flag("--galsystem-smoke"):
@@ -58,6 +70,8 @@ func _ready() -> void:
 		call_deferred("_run_dialogue_manager_smoke")
 	elif _has_cmdline_flag("--galsystem-narcissu-private-smoke"):
 		call_deferred("_run_narcissu_private_smoke")
+	elif _has_cmdline_flag("--galsystem-narcissu-local-smoke"):
+		call_deferred("_run_narcissu_local_smoke")
 
 func _process(delta: float) -> void:
 	_update_typewriter(delta)
@@ -71,6 +85,8 @@ func _validate_extension_scripts() -> void:
 	assert(load("res://scripts/systems/PhoneSystem.gd") != null)
 	assert(load("res://scripts/systems/CalendarSystem.gd") != null)
 	assert(load("res://autoload/FlowchartSystem.gd") != null)
+	assert(load("res://scripts/systems/NarcissuAssetResolver.gd") != null)
+	assert(load("res://scripts/systems/NarcissuCommandExecutor.gd") != null)
 
 func _connect_runner() -> void:
 	ScenarioRunner.line_presented.connect(_on_line_presented)
@@ -143,6 +159,14 @@ func _build_background() -> void:
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 
+	background_texture = TextureRect.new()
+	background_texture.name = "BackgroundTexture"
+	background_texture.visible = false
+	background_texture.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	background_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	background.add_child(background_texture)
+
 	background_label = Label.new()
 	background_label.text = "bg: title"
 	background_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -152,6 +176,11 @@ func _build_background() -> void:
 	background.add_child(background_label)
 
 func _build_character_stage() -> void:
+	narcissu_stage = Control.new()
+	narcissu_stage.name = "NarcissuStage"
+	narcissu_stage.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(narcissu_stage)
+
 	var stage := Control.new()
 	stage.name = "CharacterStage"
 	stage.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -352,6 +381,22 @@ func _build_flow_panel() -> void:
 	flow_panel.add_child(flow_text)
 	add_child(flow_panel)
 
+func _build_audio_players() -> void:
+	bgm_player = AudioStreamPlayer.new()
+	bgm_player.name = "NarcissuBGM"
+	bgm_player.bus = NarcissuRuntimeProfile.BGM_BUS
+	add_child(bgm_player)
+	voice_player = AudioStreamPlayer.new()
+	voice_player.name = "NarcissuVoice"
+	voice_player.bus = NarcissuRuntimeProfile.VOICE_BUS
+	add_child(voice_player)
+	for i in range(4):
+		var player := AudioStreamPlayer.new()
+		player.name = "NarcissuSFX_%d" % i
+		player.bus = NarcissuRuntimeProfile.SFX_BUS
+		add_child(player)
+		sfx_players.append(player)
+
 func _build_title_panel() -> void:
 	title_panel = PanelContainer.new()
 	title_panel.name = "TitlePanel"
@@ -383,11 +428,14 @@ func _menu_button(label: String, callback: Callable) -> Button:
 
 func _show_title() -> void:
 	_game_started = false
+	_stop_all_narcissu_media()
 	title_panel.visible = true
 	dialogue_panel.visible = false
 	choice_box.visible = false
 	phone_overlay.visible = false
 	_clear_characters()
+	background_texture.visible = false
+	background_texture.texture = null
 	background_label.text = "galsystem title"
 	speaker_label.text = ""
 	_current_full_text = ""
@@ -414,6 +462,9 @@ func _start_private_galscript(path: String, label: String) -> bool:
 	title_panel.visible = false
 	dialogue_panel.visible = true
 	_game_started = true
+	_clear_narcissu_stage()
+	if _narcissu_executor != null and _narcissu_executor.has_method("reset_runtime_flags"):
+		_narcissu_executor.call("reset_runtime_flags")
 	return ScenarioRunner.start(path, label)
 
 func _start_dialogue_manager_sample() -> void:
@@ -484,6 +535,8 @@ func _update_typewriter(delta: float) -> void:
 func _update_auto_skip(delta: float) -> void:
 	if not _game_started or _menu_open or backlog_panel.visible or save_load_panel.visible or debug_panel.visible or flow_panel.visible or choice_box.visible:
 		return
+	if _dialogue_backend == "dialogue_manager":
+		return
 	if _typing:
 		if _skip_mode:
 			_finish_typewriter()
@@ -530,6 +583,9 @@ func _on_choices_presented(choices: Array[Dictionary]) -> void:
 	choice_box.visible = true
 
 func _on_command_requested(command: String, args: Array) -> void:
+	if _narcissu_executor != null and bool(_narcissu_executor.call("handles", command)):
+		if bool(_narcissu_executor.call("execute", command, args)):
+			return
 	match command:
 		"bg":
 			_set_background(str(args[0]) if args.size() > 0 else "none")
@@ -612,9 +668,97 @@ func _schedule_event(args: Array) -> void:
 	_set_status("Scheduled event: %s" % event_id)
 
 func _set_background(bg_id: String) -> void:
+	background_texture.visible = false
+	background_texture.texture = null
 	background_label.text = "bg: %s" % bg_id
 	var hash_value: int = abs(hash(bg_id))
 	background.color = Color.from_hsv(float(hash_value % 360) / 360.0, 0.35, 0.28)
+
+func show_narcissu_background(ref: String, texture: Texture2D, result: Dictionary) -> void:
+	if texture != null:
+		background_texture.texture = texture
+		background_texture.visible = true
+		background_label.text = ""
+		_last_media_status["background"] = ref
+		_set_status("Narcissu BG loaded: %s" % ref.get_file())
+	else:
+		_set_background(ref)
+		_set_status("Narcissu BG missing: %s" % ref)
+
+func show_narcissu_sprite(sprite_id: String, ref: String, x: float, y: float, texture: Texture2D, visible: bool, result: Dictionary) -> void:
+	var rect: TextureRect
+	if narcissu_sprite_slots.has(sprite_id):
+		rect = narcissu_sprite_slots[sprite_id]
+	else:
+		rect = TextureRect.new()
+		rect.name = "NarcissuSprite_%s" % sprite_id
+		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		narcissu_stage.add_child(rect)
+		narcissu_sprite_slots[sprite_id] = rect
+	var viewport_size := get_viewport_rect().size
+	rect.position = NarcissuRuntimeProfile.source_to_viewport(Vector2(x, y), viewport_size)
+	if texture != null:
+		rect.texture = texture
+		rect.custom_minimum_size = texture.get_size() * (viewport_size.x / NarcissuRuntimeProfile.SOURCE_WIDTH)
+	else:
+		rect.texture = null
+	rect.visible = visible and texture != null
+	_last_media_status["sprite_%s" % sprite_id] = ref
+
+func set_narcissu_sprite_visible(sprite_id: String, visible: bool) -> void:
+	if narcissu_sprite_slots.has(sprite_id):
+		narcissu_sprite_slots[sprite_id].visible = visible
+
+func clear_narcissu_sprite(sprite_id: String) -> void:
+	if sprite_id == "all":
+		_clear_narcissu_stage()
+	elif narcissu_sprite_slots.has(sprite_id):
+		narcissu_sprite_slots[sprite_id].queue_free()
+		narcissu_sprite_slots.erase(sprite_id)
+
+func play_narcissu_bgm(ref: String, stream: AudioStream, loop: bool, result: Dictionary) -> void:
+	if stream != null:
+		bgm_player.stream = stream
+		bgm_player.play()
+		_last_media_status["bgm"] = ref
+		_set_status("Narcissu BGM loaded: %s" % ref.get_file())
+	else:
+		_set_status("Narcissu BGM missing: %s" % ref)
+
+func stop_narcissu_bgm() -> void:
+	if bgm_player != null:
+		bgm_player.stop()
+
+func play_narcissu_sfx(channel: String, ref: String, stream: AudioStream, voice: bool, result: Dictionary) -> void:
+	if stream == null:
+		_set_status("Narcissu %s missing: %s" % ["voice" if voice else "SFX", ref])
+		return
+	var player := voice_player if voice else sfx_players[abs(hash(channel)) % sfx_players.size()]
+	player.stream = stream
+	player.play()
+	_last_media_status["voice" if voice else "sfx"] = ref
+	_set_status("Narcissu %s loaded: %s" % ["voice" if voice else "SFX", ref.get_file()])
+
+func stop_narcissu_sfx(channel: String = "all") -> void:
+	if voice_player != null and (channel == "all" or channel == "0"):
+		voice_player.stop()
+	for player in sfx_players:
+		player.stop()
+
+func _clear_narcissu_stage() -> void:
+	for rect in narcissu_sprite_slots.values():
+		if is_instance_valid(rect):
+			rect.queue_free()
+	narcissu_sprite_slots.clear()
+
+func _stop_all_narcissu_media() -> void:
+	if bgm_player != null:
+		bgm_player.stop()
+	if voice_player != null:
+		voice_player.stop()
+	for player in sfx_players:
+		player.stop()
 
 func _show_character(args: Array) -> void:
 	var character_id: String = str(args[0]) if args.size() > 0 else "character"
@@ -812,6 +956,8 @@ func _presentation_snapshot() -> Dictionary:
 	return {
 		"background_text": background_label.text,
 		"background_color": background.color.to_html(),
+		"background_texture_visible": background_texture.visible,
+		"media_status": _last_media_status.duplicate(true),
 		"characters": chars,
 		"phone_visible": phone_overlay.visible,
 		"phone_text": phone_label.text,
@@ -825,6 +971,8 @@ func _presentation_snapshot() -> Dictionary:
 func _restore_presentation(data: Dictionary) -> void:
 	background_label.text = str(data.get("background_text", "bg: restored"))
 	background.color = Color(data.get("background_color", "1d2638"))
+	background_texture.visible = bool(data.get("background_texture_visible", false)) and background_texture.texture != null
+	_last_media_status = data.get("media_status", {}).duplicate(true)
 	var chars: Dictionary = data.get("characters", {})
 	for slot_name in chars.keys():
 		if character_slots.has(slot_name):
@@ -842,6 +990,62 @@ func _restore_presentation(data: Dictionary) -> void:
 	text_label.text = _current_full_text
 	_finish_typewriter()
 
+
+func _run_narcissu_local_smoke() -> void:
+	if not FileAccess.file_exists(NARCISSU1_PRIVATE_SCRIPT) or not FileAccess.file_exists(NARCISSU2_PRIVATE_SCRIPT):
+		print("narcissu local smoke skipped: generated private scripts are missing")
+		get_tree().quit(0)
+		return
+	if _narcissu_executor == null or not bool(_narcissu_executor.call("has_private_media")):
+		print("narcissu local smoke skipped: private game media/manifest missing under reference_private/narcissu/game_data")
+		get_tree().quit(0)
+		return
+	_assert_narcissu_local_case(NARCISSU1_PRIVATE_SCRIPT, "gp32_image")
+	_assert_narcissu_local_case(NARCISSU2_PRIVATE_SCRIPT, "haeleth_nar2")
+	print("narcissu local smoke ok")
+	get_tree().quit(0)
+
+func _assert_narcissu_local_case(path: String, label: String) -> void:
+	assert(_start_private_galscript(path, label))
+	_advance_until_narcissu_media(256)
+	assert(not str(ScenarioRunner.get_current_line().get("text", "")).is_empty())
+	assert(VNState.backlog.size() > 0)
+	assert(bool(_narcissu_executor.get("last_background_loaded")))
+	assert(bool(_narcissu_executor.get("last_bgm_loaded")))
+	assert(bool(_narcissu_executor.get("last_sfx_or_voice_loaded")))
+	var compat_before := ScenarioRunner.get_compatibility_state()
+	_quick_save()
+	assert(SaveSystem.has_slot(1))
+	_quick_load()
+	var compat_after := ScenarioRunner.get_compatibility_state()
+	assert(str(ScenarioRunner.get_checkpoint().get("path", "")) == path)
+	assert(typeof(compat_after.get("num_vars", {})) == TYPE_DICTIONARY)
+	assert(typeof(compat_after.get("call_stack", [])) == TYPE_ARRAY)
+	assert(compat_before.has("num_vars") and compat_after.has("num_vars"))
+	_toggle_backlog()
+	assert(backlog_panel.visible)
+	_toggle_backlog()
+	_toggle_auto_mode()
+	assert(_auto_mode)
+	_toggle_auto_mode()
+	_toggle_skip_mode()
+	assert(_skip_mode)
+	_toggle_skip_mode()
+
+func _advance_until_narcissu_media(max_steps: int) -> void:
+	for step in range(max_steps):
+		var has_text := not str(ScenarioRunner.get_current_line().get("text", "")).is_empty()
+		var has_bg := bool(_narcissu_executor.get("last_background_loaded"))
+		var has_bgm := bool(_narcissu_executor.get("last_bgm_loaded"))
+		var has_sfx := bool(_narcissu_executor.get("last_sfx_or_voice_loaded"))
+		if has_text and has_bg and has_bgm and has_sfx:
+			return
+		if ScenarioRunner.is_finished():
+			return
+		if ScenarioRunner.is_waiting_for_choice():
+			ScenarioRunner.choose(0)
+		else:
+			ScenarioRunner.next()
 
 func _run_narcissu_private_smoke() -> void:
 	if not FileAccess.file_exists(NARCISSU1_PRIVATE_SCRIPT) or not FileAccess.file_exists(NARCISSU2_PRIVATE_SCRIPT):
