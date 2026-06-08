@@ -95,7 +95,7 @@ Notes:
 - `--galsystem-dm-smoke` may ask for one editor import pass on a fresh checkout. If needed, run:
 
   ```bash
-  godot --headless --editor --path . --quit-after 10
+  godot --headless --import --path .
   ```
 
 - Narcissu private/local smokes are public-safe: they pass when private local data exists and skip cleanly when it does not.
