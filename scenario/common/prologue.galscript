@@ -1,0 +1,77 @@
+# galsystem Phase-1 vertical slice scenario. Keep scripts text-first and Git-friendly.
+label start
+chapter prologue
+day 1
+worldline 1.000000
+bg winter_street
+bgm winter_theme
+narr|十二月的风从校门口穿过。这个垂直切片用于验证长篇 ADV 的系统边界，而不是最终美术表现。
+show kazusa neutral center
+say 冬马|你迟到了。
+show setsuna smile left
+say 雪菜|没关系，今天只是第一阶段验收测试。
+tip vn_architecture
+set_flag met_heroines true
+affection setsuna +1
+affection kazusa +1
+schedule_event music_rehearsal 2 kazusa 3 visited_music_room
+phone inbox
+mail sg001 unknown 世界线变动率 如果你看到这封邮件，说明手机触发器占位已经接通。
+narr|手机震动了一下。屏幕亮起，像是某条世界线从这里开始偏移。
+choice 接电话并回复邮件->phone_call|先放着，去音乐室->music_room
+
+label phone_call
+set_flag answered_phone true
+read_mail sg001
+reply_mail sg001 el_psy_congroo
+set_var phone_keyword el_psy_congroo
+worldline 1.048596
+bg lab_evening
+sfx phone_pickup
+show okabe serious center
+say 手机|未知号码：如果你想改变结局，就不要把剧情状态写进 UI 脚本里。
+phone close
+cg first_phone_trigger
+tip worldline_tips
+if_var phone_keyword el_psy_congroo sg_note phone_bad
+
+label phone_bad
+narr|没有正确回复关键词，手机链没有完成。
+jump ending
+
+label music_room
+set_flag visited_music_room true
+bg music_room
+hide left
+show kazusa piano center
+say 冬马|先记住这一点：演出命令和剧本文本必须分离。
+affection kazusa +2
+advance_day 1
+if_affection kazusa 3 affection_ready affection_low
+
+label affection_low
+narr|好感度不足，排练事件不会触发。
+jump ending
+
+label affection_ready
+if_calendar_event music_rehearsal white_album_note calendar_miss
+
+label calendar_miss
+narr|日程事件没有触发，说明排程条件不满足。
+jump ending
+
+label sg_note
+set_flag sg_branch_observed true
+narr|偏《命运石之门》的分支已完成：邮件接收、阅读、回复、世界线变化、TIPS/CG 解锁和分支观测。
+jump ending
+
+label white_album_note
+set_flag white_album_branch_observed true
+route kazusa
+narr|偏《白色相簿》的分支已完成：日期推进、好感度阈值、条件事件触发和路线锁定。
+jump ending
+
+label ending
+clear_chars
+narr|Phase 1 垂直切片结束。系统已验证标题流、文本脚本、集中状态、演出导演、手机/日程分支、存读档、流程追踪和 lint/smoke 管线。
+end
