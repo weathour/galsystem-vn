@@ -991,6 +991,13 @@ func _restore_presentation(data: Dictionary) -> void:
 	_finish_typewriter()
 
 
+func _narcissu_smoke_require(condition: bool, message: String) -> bool:
+	if not condition:
+		push_error("narcissu local smoke failed: %s" % message)
+		get_tree().quit(1)
+		return false
+	return true
+
 func _run_narcissu_local_smoke() -> void:
 	if not FileAccess.file_exists(NARCISSU1_PRIVATE_SCRIPT) or not FileAccess.file_exists(NARCISSU2_PRIVATE_SCRIPT):
 		print("narcissu local smoke skipped: generated private scripts are missing")
@@ -1006,30 +1013,44 @@ func _run_narcissu_local_smoke() -> void:
 	get_tree().quit(0)
 
 func _assert_narcissu_local_case(path: String, label: String) -> void:
-	assert(_start_private_galscript(path, label))
+	if not _narcissu_smoke_require(_start_private_galscript(path, label), "start %s" % path):
+		return
 	_advance_until_narcissu_media(256)
-	assert(not str(ScenarioRunner.get_current_line().get("text", "")).is_empty())
-	assert(VNState.backlog.size() > 0)
-	assert(bool(_narcissu_executor.get("last_background_loaded")))
-	assert(bool(_narcissu_executor.get("last_bgm_loaded")))
-	assert(bool(_narcissu_executor.get("last_sfx_or_voice_loaded")))
+	if not _narcissu_smoke_require(not str(ScenarioRunner.get_current_line().get("text", "")).is_empty(), "text presented for %s" % path):
+		return
+	if not _narcissu_smoke_require(VNState.backlog.size() > 0, "backlog populated"):
+		return
+	if not _narcissu_smoke_require(bool(_narcissu_executor.get("last_background_loaded")), "background loaded"):
+		return
+	if not _narcissu_smoke_require(bool(_narcissu_executor.get("last_bgm_loaded")), "bgm loaded"):
+		return
+	if not _narcissu_smoke_require(bool(_narcissu_executor.get("last_sfx_or_voice_loaded")), "sfx or voice loaded"):
+		return
 	var compat_before := ScenarioRunner.get_compatibility_state()
 	_quick_save()
-	assert(SaveSystem.has_slot(1))
+	if not _narcissu_smoke_require(SaveSystem.has_slot(1), "quick save slot exists"):
+		return
 	_quick_load()
 	var compat_after := ScenarioRunner.get_compatibility_state()
-	assert(str(ScenarioRunner.get_checkpoint().get("path", "")) == path)
-	assert(typeof(compat_after.get("num_vars", {})) == TYPE_DICTIONARY)
-	assert(typeof(compat_after.get("call_stack", [])) == TYPE_ARRAY)
-	assert(compat_before.has("num_vars") and compat_after.has("num_vars"))
+	if not _narcissu_smoke_require(str(ScenarioRunner.get_checkpoint().get("path", "")) == path, "checkpoint restored path"):
+		return
+	if not _narcissu_smoke_require(typeof(compat_after.get("num_vars", {})) == TYPE_DICTIONARY, "num vars restored"):
+		return
+	if not _narcissu_smoke_require(typeof(compat_after.get("call_stack", [])) == TYPE_ARRAY, "call stack restored"):
+		return
+	if not _narcissu_smoke_require(compat_before.has("num_vars") and compat_after.has("num_vars"), "compat state present"):
+		return
 	_toggle_backlog()
-	assert(backlog_panel.visible)
+	if not _narcissu_smoke_require(backlog_panel.visible, "backlog toggle"):
+		return
 	_toggle_backlog()
 	_toggle_auto_mode()
-	assert(_auto_mode)
+	if not _narcissu_smoke_require(_auto_mode, "auto toggle"):
+		return
 	_toggle_auto_mode()
 	_toggle_skip_mode()
-	assert(_skip_mode)
+	if not _narcissu_smoke_require(_skip_mode, "skip toggle"):
+		return
 	_toggle_skip_mode()
 
 func _advance_until_narcissu_media(max_steps: int) -> void:
