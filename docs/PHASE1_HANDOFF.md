@@ -149,3 +149,20 @@ These are accepted Phase-1 limitations, not current blockers:
 ## Safe continuation rule
 
 Before starting Phase 2, rerun the validation commands above. If they fail, fix regressions before adding new systems.
+
+## Dialogue Manager integration update
+
+Dialogue Manager v3.10.4 is now installed under `addons/dialogue_manager/` and available as a second backend through `DialogueManagerAdapter.gd`. See `docs/DIALOGUE_MANAGER_INTEGRATION.md`.
+
+Additional validation:
+
+```bash
+godot --headless --editor --path . --quit-after 10
+godot --headless --path . --quit-after 120 -- --galsystem-dm-smoke
+```
+
+Expected key output:
+
+```text
+dialogue manager smoke ok
+```

@@ -1,0 +1,15 @@
+~ start
+系统: Dialogue Manager v3.10.4 已接入 galsystem。
+系统: 当前文本和选项来自 *.dialogue 资源，VNState、存档、手机、日程、Flow 等系统继续由 galsystem 负责。
+- 测试手机叙事接口 => phone_path
+- 测试日程/好感度接口 => calendar_path
+
+~ phone_path
+系统: 这里适合迁移《命运石之门》式手机、邮件、关键词回复剧情。
+系统: 下一步可以把 PhoneSystem 命令做成 Dialogue Manager mutation 或 adapter command。
+=> END
+
+~ calendar_path
+系统: 这里适合迁移《白色相簿》式日程、好感度、路线锁定剧情。
+系统: 下一步可以把 CalendarSystem 和 RouteManager 暴露给 Dialogue Manager 的 extra_game_states。
+=> END

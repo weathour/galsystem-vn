@@ -4,6 +4,7 @@ extends Control
 ## later be replaced by Dialogue Manager or another adapter.
 
 const START_SCRIPT := "res://scenario/common/prologue.galscript"
+const DM_SAMPLE_SCRIPT := "res://scenario/dialogue_manager/prologue.dialogue"
 const SAVE_SLOT_COUNT := 6
 
 var background: ColorRect
@@ -37,6 +38,7 @@ var _auto_wait: float = 0.0
 var _last_status_message: String = "LMB/Space: 推进  Esc: 菜单  B: 历史  F1: 调试  F2: 流程  F5/F9: 快存/快读"
 var _menu_open: bool = false
 var _game_started: bool = false
+var _dialogue_backend: String = "galscript"
 
 enum SaveLoadMode { SAVE, LOAD }
 var _save_load_mode: SaveLoadMode = SaveLoadMode.SAVE
@@ -50,6 +52,8 @@ func _ready() -> void:
 		call_deferred("_run_smoke_test")
 	elif _has_cmdline_flag("--galsystem-qa-invalid-save"):
 		call_deferred("_run_invalid_save_qa")
+	elif _has_cmdline_flag("--galsystem-dm-smoke"):
+		call_deferred("_run_dialogue_manager_smoke")
 
 func _process(delta: float) -> void:
 	_update_typewriter(delta)
@@ -107,7 +111,10 @@ func _handle_advance() -> void:
 	if _typing:
 		_finish_typewriter()
 		return
-	ScenarioRunner.next()
+	if _dialogue_backend == "dialogue_manager":
+		_advance_dialogue_manager()
+	else:
+		ScenarioRunner.next()
 
 func _build_ui() -> void:
 	_build_background()
@@ -274,7 +281,8 @@ func _build_system_menu() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 28)
 	vbox.add_child(title)
-	vbox.add_child(_menu_button("开始游戏", func() -> void: _start_new_game()))
+	vbox.add_child(_menu_button("开始 .galscript", func() -> void: _start_new_game()))
+	vbox.add_child(_menu_button("开始 Dialogue Manager", func() -> void: _start_dialogue_manager_sample()))
 	vbox.add_child(_menu_button("保存", func() -> void: _open_save_load(SaveLoadMode.SAVE)))
 	vbox.add_child(_menu_button("读取", func() -> void: _open_save_load(SaveLoadMode.LOAD)))
 	vbox.add_child(_menu_button("Backlog", func() -> void: _toggle_backlog()))
@@ -353,7 +361,8 @@ func _build_title_panel() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 30)
 	vbox.add_child(title)
-	vbox.add_child(_menu_button("Start", func() -> void: _start_new_game()))
+	vbox.add_child(_menu_button("Start .galscript", func() -> void: _start_new_game()))
+	vbox.add_child(_menu_button("Start Dialogue Manager", func() -> void: _start_dialogue_manager_sample()))
 	vbox.add_child(_menu_button("Continue Slot 1", func() -> void: _load_slot(1)))
 	vbox.add_child(_menu_button("System", func() -> void: _toggle_system_menu(true)))
 	vbox.add_child(_menu_button("Debug", func() -> void: _toggle_debug_panel()))
@@ -379,12 +388,55 @@ func _show_title() -> void:
 	_set_status("Title flow ready — Start begins the vertical slice")
 
 func _start_new_game() -> void:
+	_dialogue_backend = "galscript"
 	VNState.reset()
 	_close_overlays()
 	title_panel.visible = false
 	dialogue_panel.visible = true
 	_game_started = true
 	ScenarioRunner.start(START_SCRIPT, "start")
+
+func _start_dialogue_manager_sample() -> void:
+	_dialogue_backend = "dialogue_manager"
+	VNState.reset()
+	_close_overlays()
+	title_panel.visible = false
+	dialogue_panel.visible = true
+	_game_started = true
+	FlowchartSystem.visit_label("dm:start")
+	var line := await DialogueManagerAdapter.start(DM_SAMPLE_SCRIPT, "start")
+	_present_dialogue_manager_line(line)
+
+func _advance_dialogue_manager() -> void:
+	var line := await DialogueManagerAdapter.get_next_line()
+	_present_dialogue_manager_line(line)
+
+func _choose_dialogue_manager_response(index: int) -> void:
+	choice_box.visible = false
+	var line := await DialogueManagerAdapter.choose_response(index)
+	_present_dialogue_manager_line(line)
+
+func _present_dialogue_manager_line(line: Dictionary) -> void:
+	if line.is_empty():
+		_on_scenario_finished()
+		return
+	FlowchartSystem.visit_label("dm:%s" % str(line.get("id", "")))
+	_on_line_presented(str(line.get("speaker", "")), str(line.get("text", "")))
+	var responses: Array = line.get("responses", [])
+	if not responses.is_empty():
+		_finish_typewriter()
+		for child in choice_box.get_children():
+			child.queue_free()
+		FlowchartSystem.record_choice(FlowchartSystem.current_label, responses)
+		for i in range(responses.size()):
+			var response_index := i
+			var button := Button.new()
+			button.text = str(responses[i].get("text", "Response %d" % i))
+			button.pressed.connect(func() -> void:
+				_choose_dialogue_manager_response(response_index)
+			)
+			choice_box.add_child(button)
+		choice_box.visible = true
 
 func _update_typewriter(delta: float) -> void:
 	if not _typing:
@@ -729,6 +781,8 @@ func _presentation_snapshot() -> Dictionary:
 		"speaker": speaker_label.text,
 		"text": _current_full_text,
 		"game_started": _game_started,
+		"dialogue_backend": _dialogue_backend,
+		"dialogue_manager": DialogueManagerAdapter.snapshot() if has_node("/root/DialogueManagerAdapter") else {},
 	}
 
 func _restore_presentation(data: Dictionary) -> void:
@@ -745,6 +799,9 @@ func _restore_presentation(data: Dictionary) -> void:
 	speaker_label.text = str(data.get("speaker", ""))
 	_current_full_text = str(data.get("text", ""))
 	_game_started = bool(data.get("game_started", true))
+	_dialogue_backend = str(data.get("dialogue_backend", "galscript"))
+	if has_node("/root/DialogueManagerAdapter"):
+		DialogueManagerAdapter.restore(data.get("dialogue_manager", {}))
 	text_label.text = _current_full_text
 	_finish_typewriter()
 
@@ -758,6 +815,23 @@ func _run_invalid_save_qa() -> void:
 	var payload := SaveSystem.load_slot(99)
 	assert(payload.is_empty())
 	print("qa: invalid save payload rejected")
+	get_tree().quit(0)
+
+func _run_dialogue_manager_smoke() -> void:
+	assert(title_panel.visible)
+	await _start_dialogue_manager_sample()
+	assert(_dialogue_backend == "dialogue_manager")
+	assert(_current_full_text.contains("Dialogue Manager"))
+	await _advance_dialogue_manager()
+	assert(choice_box.visible)
+	await _choose_dialogue_manager_response(0)
+	assert(_current_full_text.contains("命运石之门"))
+	await _advance_dialogue_manager()
+	assert(_current_full_text.contains("PhoneSystem") or _current_full_text.contains("手机"))
+	await _advance_dialogue_manager()
+	assert(_current_full_text == "Phase 1 vertical slice demo ended.")
+	DialogueManagerAdapter.reset()
+	print("dialogue manager smoke ok")
 	get_tree().quit(0)
 
 func _run_smoke_test() -> void:
