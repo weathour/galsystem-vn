@@ -148,6 +148,10 @@ These are accepted Phase-1 limitations, not current blockers:
 6. Continue hardening Dialogue Manager save/load beyond the current mid-choice smoke.
 7. Extend the command registry into runtime dispatch checks and begin splitting UI components.
 
+## See also
+
+See also: `docs/PHASE2_HANDOFF.md` for the current Dialogue Manager backend and command registry handoff.
+
 ## Safe continuation rule
 
 Before starting Phase 2, rerun the validation commands above. If they fail, fix regressions before adding new systems.
