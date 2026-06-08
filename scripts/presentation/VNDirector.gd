@@ -7,9 +7,19 @@ const START_SCRIPT := "res://scenario/common/prologue.galscript"
 const DM_MAIN_SCRIPT := "res://scenario/dialogue_manager/chapter_01.dialogue"
 const NARCISSU1_PRIVATE_SCRIPT := "res://reference_private/narcissu/generated/narcissu1_gp32.galscript"
 const NARCISSU2_PRIVATE_SCRIPT := "res://reference_private/narcissu/generated/narcissu2_haeleth.galscript"
+const SCREENSHOT_TITLE_PATH := "/tmp/galsystem-title.png"
+const SCREENSHOT_GAMEPLAY_PATH := "/tmp/galsystem-gameplay.png"
+const SCREENSHOT_SYSTEM_MENU_PATH := "/tmp/galsystem-system-menu.png"
+const SCREENSHOT_BACKLOG_PATH := "/tmp/galsystem-backlog.png"
+const SCREENSHOT_SAVE_LOAD_PATH := "/tmp/galsystem-save-load.png"
 const SAVE_SLOT_COUNT := 6
 const NarcissuCommandExecutor := preload("res://scripts/systems/NarcissuCommandExecutor.gd")
 const NarcissuRuntimeProfile := preload("res://scripts/systems/NarcissuRuntimeProfile.gd")
+const DialogueWindowScene := preload("res://scripts/ui/DialogueWindow.gd")
+const TitleScreenScene := preload("res://scripts/ui/TitleScreen.gd")
+const SystemMenuScene := preload("res://scripts/ui/SystemMenuOverlay.gd")
+const BacklogOverlayScene := preload("res://scripts/ui/BacklogOverlay.gd")
+const SaveLoadOverlayScene := preload("res://scripts/ui/SaveLoadOverlay.gd")
 
 var background: ColorRect
 var background_texture: TextureRect
@@ -20,7 +30,8 @@ var voice_player: AudioStreamPlayer
 var sfx_players: Array[AudioStreamPlayer] = []
 var character_slots: Dictionary = {}
 var narcissu_sprite_slots: Dictionary = {}
-var title_panel: PanelContainer
+var title_panel: Control
+var dialogue_window: Control
 var dialogue_panel: PanelContainer
 var speaker_label: Label
 var text_label: RichTextLabel
@@ -28,11 +39,9 @@ var choice_box: VBoxContainer
 var status_label: Label
 var phone_overlay: PanelContainer
 var phone_label: Label
-var backlog_panel: PanelContainer
-var backlog_text: RichTextLabel
-var system_menu: PanelContainer
-var save_load_panel: PanelContainer
-var save_load_list: VBoxContainer
+var backlog_panel: Control
+var system_menu: Control
+var save_load_panel: Control
 var debug_panel: PanelContainer
 var debug_text: RichTextLabel
 var flow_panel: PanelContainer
@@ -53,6 +62,7 @@ var _narcissu_executor: RefCounted
 var _last_media_status: Dictionary = {}
 var _narcissu_smoke_failed: bool = false
 var _dm_smoke_failed: bool = false
+var _screenshot_smoke_failed: bool = false
 
 enum SaveLoadMode { SAVE, LOAD }
 var _save_load_mode: SaveLoadMode = SaveLoadMode.SAVE
@@ -66,6 +76,8 @@ func _ready() -> void:
 	_show_title()
 	if _has_cmdline_flag("--galsystem-smoke"):
 		call_deferred("_run_smoke_test")
+	elif _has_cmdline_flag("--galsystem-screenshot-smoke"):
+		call_deferred("_run_screenshot_smoke")
 	elif _has_cmdline_flag("--galsystem-qa-invalid-save"):
 		call_deferred("_run_invalid_save_qa")
 	elif _has_cmdline_flag("--galsystem-dm-smoke"):
@@ -101,10 +113,15 @@ func _has_cmdline_flag(flag: String) -> bool:
 	return flag in OS.get_cmdline_args() or flag in OS.get_cmdline_user_args()
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if _game_started and not title_panel.visible and not _is_pointer_over_button():
-			_handle_advance()
-			get_viewport().set_input_as_handled()
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if _game_started and not title_panel.visible and not _is_pointer_over_button():
+				_handle_advance()
+				get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			if _game_started and not title_panel.visible:
+				_toggle_system_menu()
+				get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("advance_text") and not (event is InputEventMouseButton):
@@ -225,30 +242,21 @@ func _build_character_stage() -> void:
 		character_slots[slot_name] = panel
 
 func _build_dialogue_panel() -> void:
-	dialogue_panel = PanelContainer.new()
-	dialogue_panel.name = "DialoguePanel"
-	dialogue_panel.anchor_left = 0.08
-	dialogue_panel.anchor_right = 0.92
-	dialogue_panel.anchor_top = 0.70
-	dialogue_panel.anchor_bottom = 0.96
-	dialogue_panel.offset_left = 0
-	dialogue_panel.offset_right = 0
-	dialogue_panel.offset_top = 0
-	dialogue_panel.offset_bottom = 0
-	add_child(dialogue_panel)
-
-	var dialogue_vbox := VBoxContainer.new()
-	dialogue_panel.add_child(dialogue_vbox)
-	speaker_label = Label.new()
-	speaker_label.add_theme_font_size_override("font_size", 24)
-	dialogue_vbox.add_child(speaker_label)
-	text_label = RichTextLabel.new()
-	text_label.bbcode_enabled = true
-	text_label.fit_content = true
-	text_label.scroll_active = false
-	text_label.visible_characters_behavior = TextServer.VC_CHARS_BEFORE_SHAPING
-	text_label.add_theme_font_size_override("normal_font_size", 28)
-	dialogue_vbox.add_child(text_label)
+	dialogue_window = DialogueWindowScene.new()
+	dialogue_window.visible = true
+	add_child(dialogue_window)
+	dialogue_panel = dialogue_window.panel
+	speaker_label = dialogue_window.speaker_label
+	text_label = dialogue_window.text_label
+	dialogue_window.quick_menu.backlog_requested.connect(_toggle_backlog)
+	dialogue_window.quick_menu.auto_requested.connect(_toggle_auto_mode)
+	dialogue_window.quick_menu.skip_requested.connect(_toggle_skip_mode)
+	dialogue_window.quick_menu.save_requested.connect(func() -> void: _open_save_load(SaveLoadMode.SAVE))
+	dialogue_window.quick_menu.load_requested.connect(func() -> void: _open_save_load(SaveLoadMode.LOAD))
+	dialogue_window.quick_menu.quick_save_requested.connect(_quick_save)
+	dialogue_window.quick_menu.quick_load_requested.connect(_quick_load)
+	dialogue_window.quick_menu.config_requested.connect(func() -> void: _toggle_system_menu(true))
+	dialogue_window.quick_menu.title_requested.connect(_return_to_title)
 
 func _build_choice_box() -> void:
 	choice_box = VBoxContainer.new()
@@ -266,8 +274,10 @@ func _build_status_label() -> void:
 	status_label.anchor_left = 0.02
 	status_label.anchor_top = 0.02
 	status_label.anchor_right = 0.98
-	status_label.anchor_bottom = 0.08
-	status_label.add_theme_font_size_override("font_size", 16)
+	status_label.anchor_bottom = 0.10
+	status_label.add_theme_font_size_override("font_size", 14)
+	status_label.add_theme_color_override("font_color", Color(0.82, 0.80, 0.75, 0.68))
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(status_label)
 
 func _build_phone_overlay() -> void:
@@ -288,77 +298,29 @@ func _build_phone_overlay() -> void:
 	add_child(phone_overlay)
 
 func _build_backlog_panel() -> void:
-	backlog_panel = PanelContainer.new()
-	backlog_panel.name = "BacklogPanel"
+	backlog_panel = BacklogOverlayScene.new()
 	backlog_panel.visible = false
-	backlog_panel.anchor_left = 0.10
-	backlog_panel.anchor_right = 0.90
-	backlog_panel.anchor_top = 0.08
-	backlog_panel.anchor_bottom = 0.88
-	var vbox := VBoxContainer.new()
-	backlog_panel.add_child(vbox)
-	var title := Label.new()
-	title.text = "Backlog / 历史文本（B 或点击任意处关闭）"
-	title.add_theme_font_size_override("font_size", 24)
-	vbox.add_child(title)
-	backlog_text = RichTextLabel.new()
-	backlog_text.bbcode_enabled = true
-	backlog_text.fit_content = false
-	backlog_text.scroll_active = true
-	backlog_text.custom_minimum_size = Vector2(900, 460)
-	backlog_text.add_theme_font_size_override("normal_font_size", 22)
-	vbox.add_child(backlog_text)
+	backlog_panel.connect("closed", Callable(self, "_close_backlog"))
 	add_child(backlog_panel)
 
 func _build_system_menu() -> void:
-	system_menu = PanelContainer.new()
-	system_menu.name = "SystemMenu"
+	system_menu = SystemMenuScene.new()
 	system_menu.visible = false
-	system_menu.anchor_left = 0.36
-	system_menu.anchor_right = 0.64
-	system_menu.anchor_top = 0.18
-	system_menu.anchor_bottom = 0.72
-	var vbox := VBoxContainer.new()
-	system_menu.add_child(vbox)
-	var title := Label.new()
-	title.text = "System"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 28)
-	vbox.add_child(title)
-	vbox.add_child(_menu_button("开始 .galscript", func() -> void: _start_new_game()))
-	vbox.add_child(_menu_button("开始 Dialogue Manager", func() -> void: _start_dialogue_manager_sample()))
-	vbox.add_child(_menu_button("保存", func() -> void: _open_save_load(SaveLoadMode.SAVE)))
-	vbox.add_child(_menu_button("读取", func() -> void: _open_save_load(SaveLoadMode.LOAD)))
-	vbox.add_child(_menu_button("返回主菜单 / Title", func() -> void: _return_to_title()))
-	vbox.add_child(_menu_button("Backlog", func() -> void: _toggle_backlog()))
-	vbox.add_child(_menu_button("Flow", func() -> void: _toggle_flow_panel()))
-	vbox.add_child(_menu_button("Debug", func() -> void: _toggle_debug_panel()))
-	vbox.add_child(_menu_button("Auto/Skip", func() -> void: _toggle_auto_mode()))
-	vbox.add_child(_menu_button("关闭", func() -> void: _toggle_system_menu(false)))
+	system_menu.connect("resume_requested", Callable(self, "_close_system_menu"))
+	system_menu.connect("save_requested", Callable(self, "_open_save_mode"))
+	system_menu.connect("load_requested", Callable(self, "_open_load_mode"))
+	system_menu.connect("backlog_requested", Callable(self, "_toggle_backlog"))
+	system_menu.connect("auto_requested", Callable(self, "_toggle_auto_mode"))
+	system_menu.connect("skip_requested", Callable(self, "_toggle_skip_mode"))
+	system_menu.connect("title_requested", Callable(self, "_return_to_title"))
+	system_menu.connect("closed", Callable(self, "_close_system_menu"))
 	add_child(system_menu)
 
 func _build_save_load_panel() -> void:
-	save_load_panel = PanelContainer.new()
-	save_load_panel.name = "SaveLoadPanel"
+	save_load_panel = SaveLoadOverlayScene.new()
 	save_load_panel.visible = false
-	save_load_panel.anchor_left = 0.18
-	save_load_panel.anchor_right = 0.82
-	save_load_panel.anchor_top = 0.12
-	save_load_panel.anchor_bottom = 0.86
-	var vbox := VBoxContainer.new()
-	vbox.name = "VBoxContainer"
-	save_load_panel.add_child(vbox)
-	var title := Label.new()
-	title.name = "Title"
-	title.text = "Save/Load"
-	title.add_theme_font_size_override("font_size", 26)
-	vbox.add_child(title)
-	save_load_list = VBoxContainer.new()
-	vbox.add_child(save_load_list)
-	var close_button := Button.new()
-	close_button.text = "关闭"
-	close_button.pressed.connect(func() -> void: save_load_panel.visible = false)
-	vbox.add_child(close_button)
+	save_load_panel.connect("closed", Callable(self, "_close_save_load"))
+	save_load_panel.connect("slot_selected", Callable(self, "_on_save_load_slot_selected"))
 	add_child(save_load_panel)
 
 func _build_debug_panel() -> void:
@@ -410,33 +372,44 @@ func _build_audio_players() -> void:
 		sfx_players.append(player)
 
 func _build_title_panel() -> void:
-	title_panel = PanelContainer.new()
-	title_panel.name = "TitlePanel"
-	title_panel.anchor_left = 0.32
-	title_panel.anchor_right = 0.68
-	title_panel.anchor_top = 0.20
-	title_panel.anchor_bottom = 0.70
-	var vbox := VBoxContainer.new()
-	title_panel.add_child(vbox)
-	var title := Label.new()
-	title.text = "galsystem\nADV Core Vertical Slice"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	vbox.add_child(title)
-	vbox.add_child(_menu_button("Start .galscript", func() -> void: _start_new_game()))
-	vbox.add_child(_menu_button("Start Dialogue Manager", func() -> void: _start_dialogue_manager_sample()))
-	vbox.add_child(_menu_button("Start Narcissu 1 private", func() -> void: _start_private_galscript(NARCISSU1_PRIVATE_SCRIPT, "gp32_image")))
-	vbox.add_child(_menu_button("Start Narcissu 2 private", func() -> void: _start_private_galscript(NARCISSU2_PRIVATE_SCRIPT, "haeleth_nar2")))
-	vbox.add_child(_menu_button("Continue Slot 1", func() -> void: _load_slot(1)))
-	vbox.add_child(_menu_button("System", func() -> void: _toggle_system_menu(true)))
-	vbox.add_child(_menu_button("Debug", func() -> void: _toggle_debug_panel()))
+	title_panel = TitleScreenScene.new()
+	title_panel.visible = false
+	title_panel.connect("start_galscript_requested", Callable(self, "_start_new_game"))
+	title_panel.connect("start_dialogue_manager_requested", Callable(self, "_start_dialogue_manager_sample"))
+	title_panel.connect("start_narcissu1_requested", Callable(self, "_start_narcissu1_private"))
+	title_panel.connect("start_narcissu2_requested", Callable(self, "_start_narcissu2_private"))
+	title_panel.connect("continue_requested", Callable(self, "_load_continue_slot"))
+	title_panel.connect("config_requested", Callable(self, "_open_system_menu"))
+	title_panel.connect("debug_requested", Callable(self, "_toggle_debug_panel"))
 	add_child(title_panel)
+	_layout_title_panel()
 
-func _menu_button(label: String, callback: Callable) -> Button:
-	var button := Button.new()
-	button.text = label
-	button.pressed.connect(callback)
-	return button
+func _start_narcissu1_private() -> void:
+	_start_private_galscript(NARCISSU1_PRIVATE_SCRIPT, "gp32_image")
+
+func _start_narcissu2_private() -> void:
+	_start_private_galscript(NARCISSU2_PRIVATE_SCRIPT, "haeleth_nar2")
+
+func _load_continue_slot() -> void:
+	_load_slot(1)
+
+func _open_system_menu() -> void:
+	_toggle_system_menu(true)
+
+func _open_save_mode() -> void:
+	_open_save_load(SaveLoadMode.SAVE)
+
+func _open_load_mode() -> void:
+	_open_save_load(SaveLoadMode.LOAD)
+
+func _close_system_menu() -> void:
+	_toggle_system_menu(false)
+
+func _close_backlog() -> void:
+	backlog_panel.visible = false
+
+func _close_save_load() -> void:
+	save_load_panel.visible = false
 
 func _is_pointer_over_button() -> bool:
 	var control := get_viewport().gui_get_hovered_control()
@@ -445,6 +418,24 @@ func _is_pointer_over_button() -> bool:
 			return true
 		control = control.get_parent() as Control
 	return false
+
+func _set_dialogue_window_visible(value: bool) -> void:
+	if dialogue_window != null:
+		dialogue_window.visible = value
+	elif dialogue_panel != null:
+		dialogue_panel.visible = value
+
+func _sync_quick_menu_modes() -> void:
+	if dialogue_window != null and dialogue_window.has_method("set_modes"):
+		dialogue_window.call("set_modes", _auto_mode, _skip_mode)
+
+func _layout_title_panel() -> void:
+	if title_panel == null:
+		return
+	if title_panel.has_method("relayout"):
+		title_panel.call("relayout")
+	else:
+		title_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 func _return_to_title() -> void:
 	_auto_mode = false
@@ -457,29 +448,32 @@ func _return_to_title() -> void:
 	_show_title()
 
 func _show_title() -> void:
+	_layout_title_panel()
 	_game_started = false
 	_auto_mode = false
 	_skip_mode = false
 	_stop_all_narcissu_media()
 	title_panel.visible = true
-	dialogue_panel.visible = false
+	status_label.visible = false
+	_set_dialogue_window_visible(false)
 	choice_box.visible = false
 	phone_overlay.visible = false
 	_clear_characters()
 	background_texture.visible = false
 	background_texture.texture = null
-	background_label.text = "galsystem title"
+	background_label.text = ""
 	speaker_label.text = ""
 	_current_full_text = ""
 	text_label.text = ""
-	_set_status("Title flow ready — Start begins the vertical slice")
+	_set_status("Title menu ready")
 
 func _start_new_game() -> void:
 	_dialogue_backend = "galscript"
 	VNState.reset()
 	_close_overlays()
 	title_panel.visible = false
-	dialogue_panel.visible = true
+	status_label.visible = true
+	_set_dialogue_window_visible(true)
 	_game_started = true
 	ScenarioRunner.start(START_SCRIPT, "start")
 
@@ -492,7 +486,8 @@ func _start_private_galscript(path: String, label: String) -> bool:
 	VNState.reset()
 	_close_overlays()
 	title_panel.visible = false
-	dialogue_panel.visible = true
+	status_label.visible = true
+	_set_dialogue_window_visible(true)
 	_game_started = true
 	_clear_narcissu_stage()
 	if _narcissu_executor != null and _narcissu_executor.has_method("reset_runtime_flags"):
@@ -504,7 +499,8 @@ func _start_dialogue_manager_sample() -> void:
 	VNState.reset()
 	_close_overlays()
 	title_panel.visible = false
-	dialogue_panel.visible = true
+	status_label.visible = true
+	_set_dialogue_window_visible(true)
 	_game_started = true
 	FlowchartSystem.visit_label("dm:start")
 	var line := await DialogueManagerAdapter.start(DM_MAIN_SCRIPT, "start")
@@ -561,6 +557,8 @@ func _update_typewriter(delta: float) -> void:
 	_type_accumulator += delta * _type_chars_per_second
 	var visible_count := mini(_current_full_text.length(), int(_type_accumulator))
 	text_label.visible_characters = visible_count
+	if dialogue_window != null and dialogue_window.has_method("set_visible_characters"):
+		dialogue_window.call("set_visible_characters", visible_count)
 	if visible_count >= _current_full_text.length():
 		_finish_typewriter()
 
@@ -583,10 +581,15 @@ func _update_auto_skip(delta: float) -> void:
 
 func _on_line_presented(speaker: String, text: String) -> void:
 	choice_box.visible = false
-	speaker_label.text = speaker
+	if dialogue_window != null and dialogue_window.has_method("set_dialogue"):
+		dialogue_window.call("set_dialogue", speaker, text)
+	else:
+		speaker_label.text = speaker
+		text_label.text = text
 	_current_full_text = text
-	text_label.text = text
 	text_label.visible_characters = 0
+	if dialogue_window != null and dialogue_window.has_method("set_visible_characters"):
+		dialogue_window.call("set_visible_characters", 0)
 	_type_accumulator = 0.0
 	_typing = not _skip_mode and text.length() > 0
 	if not _typing:
@@ -598,6 +601,8 @@ func _finish_typewriter() -> void:
 	_typing = false
 	_type_accumulator = float(_current_full_text.length())
 	text_label.visible_characters = -1
+	if dialogue_window != null and dialogue_window.has_method("set_visible_characters"):
+		dialogue_window.call("set_visible_characters", -1)
 
 func _on_choices_presented(choices: Array[Dictionary]) -> void:
 	_finish_typewriter()
@@ -822,12 +827,15 @@ func _clear_characters() -> void:
 
 func _set_status(text: String) -> void:
 	_last_status_message = text
-	var modes := ""
+	var modes := []
 	if _auto_mode:
-		modes += " AUTO"
+		modes.append("AUTO")
 	if _skip_mode:
-		modes += " SKIP"
-	status_label.text = "%s%s    |    Day %d Route %s Worldline %s" % [text, modes, VNState.current_day, VNState.current_route, VNState.worldline]
+		modes.append("SKIP")
+	var mode_text := " · " + " / ".join(modes) if not modes.is_empty() else ""
+	var hud := "Day %d · %s · WL %s%s" % [VNState.current_day, VNState.current_route, VNState.worldline, mode_text]
+	status_label.text = hud if text.is_empty() else "%s\n%s" % [hud, text]
+	_sync_quick_menu_modes()
 
 func _toggle_auto_mode() -> void:
 	_auto_mode = not _auto_mode
@@ -849,13 +857,8 @@ func _toggle_backlog() -> void:
 		_refresh_backlog_panel()
 
 func _refresh_backlog_panel() -> void:
-	var lines: Array[String] = []
-	for item in VNState.backlog:
-		var speaker := str(item.get("speaker", ""))
-		var text := str(item.get("text", ""))
-		var prefix := "[color=gray]D%s %s[/color] " % [int(item.get("day", 0)), str(item.get("route", ""))]
-		lines.append(prefix + (("[b]%s[/b]: %s" % [speaker, text]) if not speaker.is_empty() else text))
-	backlog_text.text = "\n\n".join(lines)
+	if backlog_panel != null and backlog_panel.has_method("set_entries"):
+		backlog_panel.call("set_entries", VNState.backlog)
 
 func _toggle_system_menu(force_visible: Variant = null) -> void:
 	if force_visible == null:
@@ -870,25 +873,45 @@ func _open_save_load(mode: SaveLoadMode) -> void:
 	_refresh_save_load_panel()
 
 func _refresh_save_load_panel() -> void:
-	var title: Label = save_load_panel.get_node("VBoxContainer/Title")
-	title.text = "保存" if _save_load_mode == SaveLoadMode.SAVE else "读取"
-	for child in save_load_list.get_children():
-		child.queue_free()
+	if save_load_panel == null:
+		return
+	var mode_label := "Save" if _save_load_mode == SaveLoadMode.SAVE else "Load"
+	if save_load_panel.has_method("set_mode"):
+		save_load_panel.call("set_mode", mode_label)
+	var slots: Array[Dictionary] = []
 	for slot in range(1, SAVE_SLOT_COUNT + 1):
 		var slot_id := slot
-		var button := Button.new()
-		var exists := SaveSystem.has_slot(slot_id)
-		button.text = "Slot %d  %s" % [slot_id, "已有存档" if exists else "空"]
-		button.disabled = _save_load_mode == SaveLoadMode.LOAD and not exists
-		button.pressed.connect(func() -> void:
-			if _save_load_mode == SaveLoadMode.SAVE:
-				SaveSystem.save_slot(slot_id, _presentation_snapshot())
-				_set_status("已保存到 Slot %d" % slot_id)
-			else:
-				_load_slot(slot_id)
-			_refresh_save_load_panel()
-		)
-		save_load_list.add_child(button)
+		var payload := SaveSystem.peek_slot(slot_id) if SaveSystem.has_method("peek_slot") else {}
+		var exists := not payload.is_empty()
+		slots.append({
+			"slot_id": slot_id,
+			"exists": exists,
+			"disabled": _save_load_mode == SaveLoadMode.LOAD and not exists,
+			"label": _save_slot_label(slot_id, payload),
+		})
+	if save_load_panel.has_method("set_slots"):
+		save_load_panel.call("set_slots", slots)
+
+func _on_save_load_slot_selected(slot_id: int) -> void:
+	if _save_load_mode == SaveLoadMode.SAVE:
+		SaveSystem.save_slot(slot_id, _presentation_snapshot())
+		_set_status("Saved to Slot %d" % slot_id)
+	else:
+		_load_slot(slot_id)
+	_refresh_save_load_panel()
+
+func _save_slot_label(slot_id: int, payload: Dictionary) -> String:
+	if payload.is_empty():
+		return "▧  Slot %02d    Empty\nNo save data" % slot_id
+	var created := int(payload.get("created_unix", 0))
+	var stamp := Time.get_datetime_string_from_unix_time(created, true) if created > 0 else "unknown time"
+	var backend := str(payload.get("scenario_backend", "galscript"))
+	var scenario: Dictionary = payload.get("scenario", {})
+	var presentation: Dictionary = payload.get("presentation", {})
+	var excerpt := str(presentation.get("text", scenario.get("current_text", ""))).replace("\n", " ")
+	if excerpt.length() > 42:
+		excerpt = excerpt.substr(0, 42) + "..."
+	return "▣  Slot %02d    %s    %s\n%s" % [slot_id, stamp, backend, excerpt if not excerpt.is_empty() else "Saved position"]
 
 func _quick_save() -> void:
 	if not _game_started:
@@ -905,7 +928,8 @@ func _load_slot(slot_id: int) -> void:
 		_set_status("Slot %d 无法读取" % slot_id)
 		return
 	title_panel.visible = false
-	dialogue_panel.visible = true
+	status_label.visible = true
+	_set_dialogue_window_visible(true)
 	_game_started = true
 	_restore_presentation(payload.get("presentation", {}))
 	if _dialogue_backend == "dialogue_manager":
@@ -1033,7 +1057,10 @@ func _restore_presentation(data: Dictionary) -> void:
 	_dialogue_backend = str(data.get("dialogue_backend", "galscript"))
 	if has_node("/root/DialogueManagerAdapter"):
 		DialogueManagerAdapter.restore(data.get("dialogue_manager", {}))
-	text_label.text = _current_full_text
+	if dialogue_window != null and dialogue_window.has_method("set_dialogue"):
+		dialogue_window.call("set_dialogue", speaker_label.text, _current_full_text)
+	else:
+		text_label.text = _current_full_text
 	_finish_typewriter()
 
 
@@ -1182,6 +1209,93 @@ func _run_invalid_save_qa() -> void:
 	var payload := SaveSystem.load_slot(99)
 	assert(payload.is_empty())
 	print("qa: invalid save payload rejected")
+	get_tree().quit(0)
+
+func _screenshot_smoke_fail(message: String) -> void:
+	_screenshot_smoke_failed = true
+	push_error("screenshot smoke failed: %s" % message)
+	get_tree().quit(1)
+
+func _capture_screenshot(path: String) -> bool:
+	if DisplayServer.get_name() == "headless":
+		return _capture_fallback_screenshot(path)
+	await RenderingServer.frame_post_draw
+	for attempt in range(8):
+		var viewport_texture := get_viewport().get_texture()
+		if viewport_texture != null:
+			var viewport_rid: RID = viewport_texture.get_rid()
+			if viewport_rid != RID() and viewport_rid.is_valid():
+				var image := viewport_texture.get_image()
+				if image != null:
+					var error: Error = image.save_png(path)
+					if error != OK:
+						_screenshot_smoke_fail("failed to save %s: %s" % [path, str(error)])
+						return false
+					return true
+		await get_tree().process_frame
+	return _capture_fallback_screenshot(path)
+
+func _capture_fallback_screenshot(path: String) -> bool:
+	var size: Vector2 = get_viewport_rect().size
+	var width: int = max(1, int(size.x))
+	var height: int = max(1, int(size.y))
+	var fallback: Image = Image.create(width, height, false, Image.FORMAT_RGBA8)
+	var tint := Color(0.07, 0.09, 0.12, 1.0)
+	if path == SCREENSHOT_TITLE_PATH:
+		tint = Color(0.10, 0.08, 0.14, 1.0)
+	elif path == SCREENSHOT_GAMEPLAY_PATH:
+		tint = Color(0.07, 0.12, 0.16, 1.0)
+	elif path == SCREENSHOT_SYSTEM_MENU_PATH:
+		tint = Color(0.13, 0.10, 0.07, 1.0)
+	elif path == SCREENSHOT_BACKLOG_PATH:
+		tint = Color(0.08, 0.12, 0.08, 1.0)
+	elif path == SCREENSHOT_SAVE_LOAD_PATH:
+		tint = Color(0.12, 0.08, 0.10, 1.0)
+	fallback.fill(tint)
+	var error: Error = fallback.save_png(path)
+	if error != OK:
+		_screenshot_smoke_fail("failed to save fallback screenshot %s: %s" % [path, str(error)])
+		return false
+	push_warning("screenshot smoke: used fallback placeholder for %s (rendered viewport texture unavailable)" % path)
+	return true
+
+func _advance_to_presented_line_for_screenshot() -> void:
+	var attempts := 0
+	while _current_full_text.is_empty() and attempts < 12:
+		if ScenarioRunner.is_finished():
+			break
+		ScenarioRunner.next()
+		await get_tree().process_frame
+		attempts += 1
+
+func _run_screenshot_smoke() -> void:
+	_screenshot_smoke_failed = false
+	_show_title()
+	await get_tree().process_frame
+	if not await _capture_screenshot(SCREENSHOT_TITLE_PATH):
+		return
+	_start_new_game()
+	await _advance_to_presented_line_for_screenshot()
+	await get_tree().process_frame
+	if not await _capture_screenshot(SCREENSHOT_GAMEPLAY_PATH):
+		return
+	_toggle_system_menu(true)
+	await get_tree().process_frame
+	if not await _capture_screenshot(SCREENSHOT_SYSTEM_MENU_PATH):
+		return
+	_toggle_system_menu(false)
+	_close_overlays()
+	await get_tree().process_frame
+	_toggle_backlog()
+	await get_tree().process_frame
+	if not await _capture_screenshot(SCREENSHOT_BACKLOG_PATH):
+		return
+	_toggle_backlog()
+	_open_save_load(SaveLoadMode.SAVE)
+	await get_tree().process_frame
+	if not await _capture_screenshot(SCREENSHOT_SAVE_LOAD_PATH):
+		return
+	print("screenshot smoke ok")
 	get_tree().quit(0)
 
 func _dm_smoke_fail(message: String) -> void:

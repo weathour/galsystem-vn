@@ -131,19 +131,19 @@ Refactor/rewrite around:
 scripts/presentation/VNDirector.gd
 ```
 
-Recommended split:
+Implemented split for the current Phase 4 slice:
 
 ```text
-scenes/ui/TitleScreen.tscn + .gd
-scenes/ui/DialogueWindow.tscn + .gd
-scenes/ui/QuickMenu.tscn + .gd
-scenes/ui/SystemMenu.tscn + .gd
-scenes/ui/BacklogOverlay.tscn + .gd
-scenes/ui/SaveLoadOverlay.tscn + .gd
-scenes/ui/NarcissuStage.tscn + .gd   # optional, if sprite/background stage is extracted
+scripts/ui/VNTheme.gd
+scripts/ui/TitleScreen.gd
+scripts/ui/DialogueWindow.gd
+scripts/ui/QuickMenu.gd
+scripts/ui/SystemMenuOverlay.gd
+scripts/ui/BacklogOverlay.gd
+scripts/ui/SaveLoadOverlay.gd
 ```
 
-`VNDirector.gd` should become an orchestrator, not a giant UI builder.
+`VNDirector.gd` is now closer to an orchestrator: it wires runtime events, state, save/load, and component signals; the player-facing title/dialogue/system/backlog/save-load UI is no longer built inline. A future pass can convert these script-built components to `.tscn` scenes if designer iteration requires it.
 
 ## Acceptance criteria for Phase 4
 
@@ -169,6 +169,8 @@ Phase 4 is complete when:
 godot --headless --path . --quit-after 120 -- --galsystem-screenshot-smoke
 ```
 
+Status: screenshot smoke command is implemented (`VNDirector.gd` writes the five PNG targets under `/tmp`). The Phase 4 UI component slice is also implemented: title screen, gameplay dialogue window, quick menu, system menu, backlog, and save/load now use script components under `scripts/ui/` plus a shared restrained VN skin. In Godot `--headless` dummy rendering, the smoke validates the UI flow and writes fallback placeholder PNGs; run the same flag without `--headless` in a graphical/Xvfb environment for true rendered visual evidence.
+
 Expected screenshot set:
 
 ```text
@@ -183,35 +185,35 @@ Expected screenshot set:
 
 Start with the smallest visible upgrade:
 
-1. Extract `DialogueWindow` and `QuickMenu` scenes.
-2. Restyle gameplay screen:
+1. Extract `DialogueWindow` and `QuickMenu` scenes. **Done as script components under `scripts/ui/`.**
+2. Restyle gameplay screen. **First pass done:**
    - full-screen background;
    - lower dialogue box;
    - namebox;
    - quick menu row;
    - click indicator.
-3. Keep current title/system/save/backlog internals temporarily.
-4. Add screenshot smoke for title + gameplay.
-5. Verify all existing smokes.
+3. Restyle and extract title/system/save/backlog internals. **Done as script components under `scripts/ui/`.**
+4. Screenshot smoke is implemented for title, gameplay, system menu, backlog, and save/load.
+5. Verify all existing smokes. **Done for this slice.**
 6. Commit.
 
 Then continue with:
 
-- title screen rewrite;
-- system menu overlay rewrite;
-- backlog overlay rewrite;
-- save/load overlay rewrite;
-- final visual QA pass.
+- final visual QA pass in a graphical renderer;
+- private-data absence messaging on title buttons;
+- optional slot thumbnail capture;
+- optional conversion from script-built UI components to `.tscn` scenes for designer iteration;
+- final art/branding and typography pass.
 
 ## Current known visual issues to fix first
 
-- Title menu looks like a debug panel.
+- Title menu has a player-facing first-pass layout; final art/branding can still improve it.
 - Game background can become a flat blue placeholder when using synthetic fixtures.
-- Dialogue box is plain, oversized/dark, and lacks VN skin detail.
-- Status text is too prominent and debug-like.
-- Save/load/backlog/system panels are prototype controls, not player-facing UI.
-- No polished quick menu.
-- No screenshot smoke yet.
+- Dialogue box now has a VN-style frame, namebox, click indicator, and quick menu; final typography/art polish remains.
+- Status text is hidden on title and reduced to subtle gameplay metadata, but should eventually become a timed notification/toast rather than persistent HUD copy.
+- Save/load/backlog/system panels now have extracted player-facing components; actual screenshot thumbnails and final art polish remain.
+- Quick menu exists and exposes Backlog, Auto, Skip, Save, Load, Q.Save, Q.Load, Config, and Title.
+- Screenshot smoke is implemented, but overall VN polish still pending.
 
 ## Validation baseline before Phase 4 edits
 
@@ -242,10 +244,10 @@ The next conversation should begin Phase 4 as a visual/UI implementation pass, n
 Default plan for next conversation:
 
 ```text
-1. inspect VNDirector current UI construction;
-2. create screenshot-smoke infrastructure;
-3. extract/rebuild DialogueWindow + QuickMenu;
-4. apply mature VN styling;
-5. run screenshot + functional smokes;
-6. commit first visual slice.
+1. run graphical screenshot smoke and inspect true rendered PNGs;
+2. add private-data missing/disabled states to title menu;
+3. add optional save-slot thumbnail capture if time allows;
+4. do a typography/final-art pass;
+5. rerun screenshot + functional smokes;
+6. commit Phase 4 visual component slice.
 ```

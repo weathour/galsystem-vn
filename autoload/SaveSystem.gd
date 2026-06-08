@@ -68,6 +68,21 @@ func load_slot(slot_id: int) -> Dictionary:
 func has_slot(slot_id: int) -> bool:
 	return FileAccess.file_exists(_slot_path(slot_id))
 
+func peek_slot(slot_id: int) -> Dictionary:
+	var path := _slot_path(slot_id)
+	if not FileAccess.file_exists(path):
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	var payload: Dictionary = parsed
+	if not _is_valid_payload(payload):
+		return {}
+	return payload
+
 func _slot_path(slot_id: int) -> String:
 	return "%s/slot_%03d.json" % [SAVE_DIR, slot_id]
 
