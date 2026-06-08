@@ -211,3 +211,21 @@ Acceptance for the next slice:
 ## Safe continuation rule
 
 Before changing the next phase, rerun the validation commands above. If any fail, fix regressions before adding new features.
+
+## Narcissu 1/2 private case-study import
+
+Added a private import path for legally obtained Narcissu 1/2 scripts:
+
+- `tools/import_nscripter_case.py` converts a local NScripter/PONScripter `0.utf` into `.galscript`.
+- `.gitignore` excludes `reference_private/` and `external_reference/` so third-party story text is not committed.
+- `VNDirector` exposes `Start Narcissu 1 private` and `Start Narcissu 2 private` title entries that load generated private scripts when present.
+- `--galsystem-narcissu-private-smoke` verifies the local private import can start both converted scripts and present text.
+- Details and exact local commands are in `docs/NARCISSU_CASE_STUDY.md`.
+
+Validation evidence added for this slice:
+
+```bash
+python3 tools/import_nscripter_case.py --self-test
+godot --headless --path . --quit-after 120 -- --galsystem-narcissu-private-smoke
+```
+

@@ -5,6 +5,8 @@ extends Control
 
 const START_SCRIPT := "res://scenario/common/prologue.galscript"
 const DM_MAIN_SCRIPT := "res://scenario/dialogue_manager/chapter_01.dialogue"
+const NARCISSU1_PRIVATE_SCRIPT := "res://reference_private/narcissu/generated/narcissu1_gp32.galscript"
+const NARCISSU2_PRIVATE_SCRIPT := "res://reference_private/narcissu/generated/narcissu2_haeleth.galscript"
 const SAVE_SLOT_COUNT := 6
 
 var background: ColorRect
@@ -54,6 +56,8 @@ func _ready() -> void:
 		call_deferred("_run_invalid_save_qa")
 	elif _has_cmdline_flag("--galsystem-dm-smoke"):
 		call_deferred("_run_dialogue_manager_smoke")
+	elif _has_cmdline_flag("--galsystem-narcissu-private-smoke"):
+		call_deferred("_run_narcissu_private_smoke")
 
 func _process(delta: float) -> void:
 	_update_typewriter(delta)
@@ -364,6 +368,8 @@ func _build_title_panel() -> void:
 	vbox.add_child(title)
 	vbox.add_child(_menu_button("Start .galscript", func() -> void: _start_new_game()))
 	vbox.add_child(_menu_button("Start Dialogue Manager", func() -> void: _start_dialogue_manager_sample()))
+	vbox.add_child(_menu_button("Start Narcissu 1 private", func() -> void: _start_private_galscript(NARCISSU1_PRIVATE_SCRIPT, "gp32_image")))
+	vbox.add_child(_menu_button("Start Narcissu 2 private", func() -> void: _start_private_galscript(NARCISSU2_PRIVATE_SCRIPT, "haeleth_nar2")))
 	vbox.add_child(_menu_button("Continue Slot 1", func() -> void: _load_slot(1)))
 	vbox.add_child(_menu_button("System", func() -> void: _toggle_system_menu(true)))
 	vbox.add_child(_menu_button("Debug", func() -> void: _toggle_debug_panel()))
@@ -396,6 +402,19 @@ func _start_new_game() -> void:
 	dialogue_panel.visible = true
 	_game_started = true
 	ScenarioRunner.start(START_SCRIPT, "start")
+
+
+func _start_private_galscript(path: String, label: String) -> bool:
+	if not FileAccess.file_exists(path):
+		_set_status("Private reference script missing: %s" % path)
+		return false
+	_dialogue_backend = "galscript"
+	VNState.reset()
+	_close_overlays()
+	title_panel.visible = false
+	dialogue_panel.visible = true
+	_game_started = true
+	return ScenarioRunner.start(path, label)
 
 func _start_dialogue_manager_sample() -> void:
 	_dialogue_backend = "dialogue_manager"
@@ -822,6 +841,32 @@ func _restore_presentation(data: Dictionary) -> void:
 		DialogueManagerAdapter.restore(data.get("dialogue_manager", {}))
 	text_label.text = _current_full_text
 	_finish_typewriter()
+
+
+func _run_narcissu_private_smoke() -> void:
+	if not FileAccess.file_exists(NARCISSU1_PRIVATE_SCRIPT) or not FileAccess.file_exists(NARCISSU2_PRIVATE_SCRIPT):
+		print("narcissu private smoke skipped: generated private scripts are missing")
+		get_tree().quit(0)
+		return
+	assert(_start_private_galscript(NARCISSU1_PRIVATE_SCRIPT, "gp32_image"))
+	_advance_until_presented_text(16)
+	assert(not str(ScenarioRunner.get_current_line().get("text", "")).is_empty())
+	assert(str(ScenarioRunner.get_checkpoint().get("path", "")) == NARCISSU1_PRIVATE_SCRIPT)
+	assert(_start_private_galscript(NARCISSU2_PRIVATE_SCRIPT, "haeleth_nar2"))
+	_advance_until_presented_text(16)
+	assert(not str(ScenarioRunner.get_current_line().get("text", "")).is_empty())
+	assert(str(ScenarioRunner.get_checkpoint().get("path", "")) == NARCISSU2_PRIVATE_SCRIPT)
+	print("narcissu private import smoke ok")
+	get_tree().quit(0)
+
+func _advance_until_presented_text(max_steps: int) -> void:
+	for step in range(max_steps):
+		var line := ScenarioRunner.get_current_line()
+		if not str(line.get("text", "")).is_empty():
+			return
+		if ScenarioRunner.is_finished():
+			return
+		ScenarioRunner.next()
 
 func _run_invalid_save_qa() -> void:
 	DirAccess.make_dir_recursive_absolute("user://saves")

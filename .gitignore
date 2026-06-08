@@ -16,3 +16,7 @@ Thumbs.db
 # Python cache
 __pycache__/
 *.pyc
+
+# Private reference material / third-party corpora (not committed)
+reference_private/
+external_reference/
