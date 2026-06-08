@@ -337,6 +337,7 @@ func _build_save_load_panel() -> void:
 	save_load_panel.anchor_top = 0.12
 	save_load_panel.anchor_bottom = 0.86
 	var vbox := VBoxContainer.new()
+	vbox.name = "VBoxContainer"
 	save_load_panel.add_child(vbox)
 	var title := Label.new()
 	title.name = "Title"
