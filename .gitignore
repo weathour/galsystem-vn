@@ -20,3 +20,6 @@ __pycache__/
 # Private reference material / third-party corpora (not committed)
 reference_private/
 external_reference/
+
+# Local OMX workflow state/artifacts
+.omx/
