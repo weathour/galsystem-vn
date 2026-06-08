@@ -51,6 +51,7 @@ var _game_started: bool = false
 var _dialogue_backend: String = "galscript"
 var _narcissu_executor: RefCounted
 var _last_media_status: Dictionary = {}
+var _narcissu_smoke_failed: bool = false
 
 enum SaveLoadMode { SAVE, LOAD }
 var _save_load_mode: SaveLoadMode = SaveLoadMode.SAVE
@@ -963,13 +964,7 @@ func _presentation_snapshot() -> Dictionary:
 		chars[slot_name] = {"visible": panel.visible, "text": panel.get_node("Label").text}
 	var narcissu_media := {}
 	if _narcissu_executor != null:
-		var results: Dictionary = _narcissu_executor.get("last_results")
-		for key in results.keys():
-			var result: Dictionary = results[key]
-			narcissu_media[key] = {
-				"reference": str(result.get("reference", "")),
-				"category": str(result.get("category", "")),
-			}
+		narcissu_media = _narcissu_executor.get("active_media").duplicate(true)
 	return {
 		"background_text": background_label.text,
 		"background_color": background.color.to_html(),
@@ -1016,20 +1011,22 @@ func _restore_narcissu_media(media: Dictionary) -> void:
 	if media.has("background"):
 		_narcissu_executor.call("execute", "narcissu_bg", [str(media["background"].get("reference", ""))])
 	if media.has("bgm"):
-		_narcissu_executor.call("execute", "narcissu_bgm", [str(media["bgm"].get("reference", "")), "loop"])
+		_narcissu_executor.call("execute", "narcissu_bgm", [str(media["bgm"].get("reference", "")), "loop" if bool(media["bgm"].get("loop", true)) else "once"])
 	for key in media.keys():
 		var key_text := str(key)
 		if key_text.begins_with("sprite_"):
 			var sprite_id := key_text.trim_prefix("sprite_")
 			var entry: Dictionary = media[key]
-			_narcissu_executor.call("execute", "narcissu_lsp", [sprite_id, str(entry.get("reference", "")), 0, 0])
+			_narcissu_executor.call("execute", "narcissu_lsp", [sprite_id, str(entry.get("reference", "")), float(entry.get("x", 0.0)), float(entry.get("y", 0.0))])
+			_narcissu_executor.call("execute", "narcissu_vsp", [sprite_id, 1 if bool(entry.get("visible", true)) else 0])
 		elif key_text == "voice":
-			_narcissu_executor.call("execute", "narcissu_voice", ["0", str(media[key].get("reference", "")), "once"])
+			_narcissu_executor.call("execute", "narcissu_voice", [str(media[key].get("channel", "0")), str(media[key].get("reference", "")), "once"])
 		elif key_text == "sfx":
-			_narcissu_executor.call("execute", "narcissu_sfx", ["0", str(media[key].get("reference", "")), "once"])
+			_narcissu_executor.call("execute", "narcissu_sfx", [str(media[key].get("channel", "0")), str(media[key].get("reference", "")), "once"])
 
 func _narcissu_smoke_require(condition: bool, message: String) -> bool:
 	if not condition:
+		_narcissu_smoke_failed = true
 		push_error("narcissu local smoke failed: %s" % message)
 		get_tree().quit(1)
 		return false
@@ -1044,8 +1041,13 @@ func _run_narcissu_local_smoke() -> void:
 		print("narcissu local smoke skipped: private game media/manifest missing under reference_private/narcissu/game_data")
 		get_tree().quit(0)
 		return
+	_narcissu_smoke_failed = false
 	_assert_narcissu_local_case(NARCISSU1_PRIVATE_SCRIPT, "gp32_image")
+	if _narcissu_smoke_failed:
+		return
 	_assert_narcissu_local_case(NARCISSU2_PRIVATE_SCRIPT, "haeleth_nar2")
+	if _narcissu_smoke_failed:
+		return
 	print("narcissu local smoke ok")
 	get_tree().quit(0)
 
@@ -1073,6 +1075,9 @@ func _assert_narcissu_local_case(path: String, label: String) -> void:
 	_narcissu_executor = NarcissuCommandExecutor.new(self)
 	_quick_load()
 	_restore_narcissu_media(saved_presentation.get("narcissu_media", {}))
+	var restored_media: Dictionary = _narcissu_executor.get("active_media")
+	if not _narcissu_smoke_require(restored_media.has("background") and restored_media.has("bgm"), "active media restored"):
+		return
 	var compat_after := ScenarioRunner.get_compatibility_state()
 	if not _narcissu_smoke_require(str(ScenarioRunner.get_checkpoint().get("path", "")) == path, "checkpoint restored path"):
 		return
