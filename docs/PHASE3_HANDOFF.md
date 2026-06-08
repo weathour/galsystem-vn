@@ -174,6 +174,16 @@ godot --headless --path . --quit-after 120 -- --galsystem-narcissu-local-smoke
   - quick save/load restores the script path and compatibility-state containers;
   - backlog, auto, and skip toggles remain functional.
 
+## Fresh checkout bootstrap
+
+On a tracked/public checkout without `.godot/`, run a Godot editor import once before Dialogue Manager runtime validation:
+
+```bash
+godot --headless --editor --path . --quit-after 10
+```
+
+The `.galscript` and Narcissu skip/runtime smokes are safe without private data. Dialogue Manager resources depend on Godot's generated global-class/import cache, so the editor-import step is part of the validation contract for fresh checkouts.
+
 ## Validation evidence
 
 Full documented validation was run from project root after implementation:
@@ -184,6 +194,7 @@ python3 tools/import_nscripter_case.py --self-test
 python3 tools/build_narcissu_manifest.py --self-test
 python3 tools/lint_galscript.py scenario
 python3 tools/lint_galscript.py --self-test
+godot --headless --editor --path . --quit-after 10   # required once on fresh checkout before DM runtime smoke
 godot --headless --path . --quit-after 120 -- --galsystem-smoke
 godot --headless --path . --quit-after 120 -- --galsystem-dm-smoke
 godot --headless --path . --quit-after 120 -- --galsystem-narcissu-private-smoke

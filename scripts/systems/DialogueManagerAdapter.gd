@@ -17,6 +17,7 @@ var current_display: Dictionary = {}
 var current_responses: Array[Dictionary] = []
 var active: bool = false
 var resource_path: String = ""
+var _dialogue_manager: Node = null
 
 func reset() -> void:
 	resource = null
@@ -28,6 +29,10 @@ func reset() -> void:
 	resource_path = ""
 
 func start(path: String, title: String = "start") -> Dictionary:
+	if not _ensure_dialogue_manager():
+		push_error("DialogueManagerAdapter: Dialogue Manager is unavailable; run a Godot editor import once on fresh checkout")
+		active = false
+		return {}
 	resource_path = path
 	resource = load(path)
 	if resource == null:
@@ -41,7 +46,10 @@ func start(path: String, title: String = "start") -> Dictionary:
 func get_next_line() -> Dictionary:
 	if not active or resource == null:
 		return {}
-	var line: Variant = await DialogueManager.get_next_dialogue_line(resource, next_id, _extra_states())
+	if not _ensure_dialogue_manager():
+		active = false
+		return {}
+	var line: Variant = await _dialogue_manager.call("get_next_dialogue_line", resource, next_id, _extra_states())
 	if typeof(line) == TYPE_DICTIONARY and line.is_empty():
 		active = false
 		current_line = null
@@ -98,6 +106,21 @@ func restore(data: Dictionary) -> bool:
 		if typeof(response) == TYPE_DICTIONARY:
 			current_responses.append(response.duplicate(true))
 	return resource != null or not active
+
+func _ensure_dialogue_manager() -> bool:
+	if _dialogue_manager != null and is_instance_valid(_dialogue_manager):
+		return true
+	if has_node("/root/DialogueManager"):
+		_dialogue_manager = get_node("/root/DialogueManager")
+		return true
+	var script := load("res://addons/dialogue_manager/dialogue_manager.gd")
+	if script == null:
+		return false
+	_dialogue_manager = Node.new()
+	_dialogue_manager.name = "DialogueManager"
+	_dialogue_manager.set_script(script)
+	get_tree().root.add_child(_dialogue_manager)
+	return true
 
 # ── Dialogue Manager mutation bridge ───────────────────────────────
 

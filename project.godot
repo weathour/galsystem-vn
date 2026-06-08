@@ -17,7 +17,6 @@ config/features=PackedStringArray("4.6", "Forward Plus")
 
 [autoload]
 
-DialogueManager="*res://addons/dialogue_manager/dialogue_manager.gd"
 DialogueManagerAdapter="*res://scripts/systems/DialogueManagerAdapter.gd"
 VNState="*res://autoload/VNState.gd"
 ScenarioRunner="*res://autoload/ScenarioRunner.gd"
