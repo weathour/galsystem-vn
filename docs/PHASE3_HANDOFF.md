@@ -241,6 +241,16 @@ The final docs update is committed after this handoff is written.
 - Save/load/backlog/auto/skip/quick-save/load are preserved and covered in local smoke.
 - Fresh public checkout remains safe: private smokes skip cleanly when ignored data is missing.
 
+## Phase 4 visual direction
+
+The next direction is now documented in:
+
+```text
+docs/PHASE4_VISUAL_HANDOFF.md
+```
+
+Do not keep polishing the current debug/prototype UI directly. Phase 4 should retain the Godot runtime and Narcissu systems, but replace the presentation layer with a mature Ren'Py/Dialogic-style VN visual layer.
+
 ## Partial / next recommended phase
 
 Phase 3 is a Narcissu local-runtime MVP, not a full NScripter emulator. Remaining recommended Phase 4 work:
