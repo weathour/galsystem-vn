@@ -700,7 +700,9 @@ func show_narcissu_sprite(sprite_id: String, ref: String, x: float, y: float, te
 	rect.position = NarcissuRuntimeProfile.source_to_viewport(Vector2(x, y), viewport_size)
 	if texture != null:
 		rect.texture = texture
-		rect.custom_minimum_size = texture.get_size() * (viewport_size.x / NarcissuRuntimeProfile.SOURCE_WIDTH)
+		var scaled_size := texture.get_size() * (viewport_size.x / NarcissuRuntimeProfile.SOURCE_WIDTH)
+		rect.custom_minimum_size = scaled_size
+		rect.size = scaled_size
 	else:
 		rect.texture = null
 	rect.visible = visible and texture != null
@@ -719,6 +721,12 @@ func clear_narcissu_sprite(sprite_id: String) -> void:
 
 func play_narcissu_bgm(ref: String, stream: AudioStream, loop: bool, result: Dictionary) -> void:
 	if stream != null:
+		if stream is AudioStreamMP3:
+			(stream as AudioStreamMP3).loop = loop
+		elif stream is AudioStreamOggVorbis:
+			(stream as AudioStreamOggVorbis).loop = loop
+		elif stream is AudioStreamWAV:
+			(stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD if loop else AudioStreamWAV.LOOP_DISABLED
 		bgm_player.stream = stream
 		bgm_player.play()
 		_last_media_status["bgm"] = ref
@@ -953,11 +961,21 @@ func _presentation_snapshot() -> Dictionary:
 	for slot_name in character_slots.keys():
 		var panel: PanelContainer = character_slots[slot_name]
 		chars[slot_name] = {"visible": panel.visible, "text": panel.get_node("Label").text}
+	var narcissu_media := {}
+	if _narcissu_executor != null:
+		var results: Dictionary = _narcissu_executor.get("last_results")
+		for key in results.keys():
+			var result: Dictionary = results[key]
+			narcissu_media[key] = {
+				"reference": str(result.get("reference", "")),
+				"category": str(result.get("category", "")),
+			}
 	return {
 		"background_text": background_label.text,
 		"background_color": background.color.to_html(),
 		"background_texture_visible": background_texture.visible,
 		"media_status": _last_media_status.duplicate(true),
+		"narcissu_media": narcissu_media,
 		"characters": chars,
 		"phone_visible": phone_overlay.visible,
 		"phone_text": phone_label.text,
@@ -973,6 +991,7 @@ func _restore_presentation(data: Dictionary) -> void:
 	background.color = Color(data.get("background_color", "1d2638"))
 	background_texture.visible = bool(data.get("background_texture_visible", false)) and background_texture.texture != null
 	_last_media_status = data.get("media_status", {}).duplicate(true)
+	_restore_narcissu_media(data.get("narcissu_media", {}))
 	var chars: Dictionary = data.get("characters", {})
 	for slot_name in chars.keys():
 		if character_slots.has(slot_name):
@@ -990,6 +1009,24 @@ func _restore_presentation(data: Dictionary) -> void:
 	text_label.text = _current_full_text
 	_finish_typewriter()
 
+
+func _restore_narcissu_media(media: Dictionary) -> void:
+	if media.is_empty() or _narcissu_executor == null:
+		return
+	if media.has("background"):
+		_narcissu_executor.call("execute", "narcissu_bg", [str(media["background"].get("reference", ""))])
+	if media.has("bgm"):
+		_narcissu_executor.call("execute", "narcissu_bgm", [str(media["bgm"].get("reference", "")), "loop"])
+	for key in media.keys():
+		var key_text := str(key)
+		if key_text.begins_with("sprite_"):
+			var sprite_id := key_text.trim_prefix("sprite_")
+			var entry: Dictionary = media[key]
+			_narcissu_executor.call("execute", "narcissu_lsp", [sprite_id, str(entry.get("reference", "")), 0, 0])
+		elif key_text == "voice":
+			_narcissu_executor.call("execute", "narcissu_voice", ["0", str(media[key].get("reference", "")), "once"])
+		elif key_text == "sfx":
+			_narcissu_executor.call("execute", "narcissu_sfx", ["0", str(media[key].get("reference", "")), "once"])
 
 func _narcissu_smoke_require(condition: bool, message: String) -> bool:
 	if not condition:
@@ -1030,7 +1067,12 @@ func _assert_narcissu_local_case(path: String, label: String) -> void:
 	_quick_save()
 	if not _narcissu_smoke_require(SaveSystem.has_slot(1), "quick save slot exists"):
 		return
+	var saved_presentation := _presentation_snapshot()
+	background_texture.texture = null
+	background_texture.visible = false
+	_narcissu_executor = NarcissuCommandExecutor.new(self)
 	_quick_load()
+	_restore_narcissu_media(saved_presentation.get("narcissu_media", {}))
 	var compat_after := ScenarioRunner.get_compatibility_state()
 	if not _narcissu_smoke_require(str(ScenarioRunner.get_checkpoint().get("path", "")) == path, "checkpoint restored path"):
 		return

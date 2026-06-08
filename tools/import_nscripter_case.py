@@ -127,7 +127,9 @@ def normalize_value(value: str) -> str:
         value = value[1:]
     if value.startswith('"') and value.endswith('"'):
         return quote(value.strip('"'))
-    if value.startswith(("%", "$")):
+    if value.startswith("%"):
+        return "%" + normalize_var(value)
+    if value.startswith("$"):
         return "$" + normalize_var(value)
     return quote(value) if re.search(r"\s", value) else value
 
