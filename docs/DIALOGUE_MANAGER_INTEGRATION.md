@@ -2,7 +2,7 @@
 
 ## Status
 
-Dialogue Manager is now integrated as a second dialogue backend.
+Dialogue Manager is integrated as a second dialogue backend and can now drive VN presentation/system commands through `DialogueManagerAdapter` mutations.
 
 - Addon: Nathan Hoad Dialogue Manager
 - Version: `v3.10.4`
@@ -10,11 +10,11 @@ Dialogue Manager is now integrated as a second dialogue backend.
 - Godot target: 4.6.x
 - License: MIT, included under `addons/dialogue_manager/LICENSE`
 
-The existing `.galscript` runner remains available as the Phase-1 fallback backend.
+The existing `.galscript` runner remains available as the fallback/backend for the Phase-1 vertical slice.
 
 ## Why v3.10.4 instead of Dialogue Manager 4
 
-As of this integration, the upstream repository README describes Dialogue Manager 4 as the Godot 4.6+ main branch but explicitly recommends using version 3 until Dialogue Manager 4 is officially released. The Godot Asset Library and release listings identify `v3.10.4 for Godot 4.6` as the current stable release. Therefore this project uses `v3.10.4`.
+The upstream repository describes Dialogue Manager 4 as the Godot 4.6+ main branch but recommends using version 3 until Dialogue Manager 4 is officially released. Therefore this project uses `v3.10.4`.
 
 ## Added project files
 
@@ -25,44 +25,81 @@ scenario/dialogue_manager/prologue.dialogue
 scenario/dialogue_manager/prologue.dialogue.import
 ```
 
-`project.godot` now includes:
+`project.godot` includes:
 
 ```text
 DialogueManager="*res://addons/dialogue_manager/dialogue_manager.gd"
 DialogueManagerAdapter="*res://scripts/systems/DialogueManagerAdapter.gd"
 ```
 
-and enables the editor plugin:
-
-```text
-enabled=PackedStringArray("res://addons/dialogue_manager/plugin.cfg")
-```
-
 ## Runtime behavior
 
-The title menu now has two start paths:
+The title menu has two start paths:
 
 1. `Start .galscript` — existing self-built runner.
-2. `Start Dialogue Manager` — Dialogue Manager sample file via `DialogueManagerAdapter`.
+2. `Start Dialogue Manager` — Dialogue Manager sample through `DialogueManagerAdapter`.
 
-`DialogueManagerAdapter.gd` is the boundary layer. It calls:
+`DialogueManagerAdapter.gd` calls:
 
 ```gdscript
 await DialogueManager.get_next_dialogue_line(resource, title, extra_game_states)
 ```
 
-and converts Dialogue Manager lines/responses into dictionaries that `VNDirector.gd` can display.
+and converts `DialogueLine` / `DialogueResponse` into dictionaries consumed by `VNDirector.gd`.
 
-Extra game states currently exposed:
+## Mutation bridge
+
+`.dialogue` files can now use `do` mutations to drive the same VN shell used by `.galscript`.
+
+Example:
 
 ```text
-VNState
-PhoneSystem
-CalendarSystem
-RouteManager
+~ start
+do bg("dm_lab_evening")
+do bgm("dm_theme")
+do show("okabe", "serious", "center")
+系统: Dialogue Manager can now drive presentation commands.
+- Test phone => phone_path
+
+~ phone_path
+do phone_open("inbox")
+do mail_receive("dm_sg001", "unknown", "世界线变动率", "body")
+do mail_read("dm_sg001")
+do mail_reply("dm_sg001", "el_psy_congroo")
+do set_worldline("1.048596")
+do unlock_tip("dm_worldline_tips")
+do unlock_cg("dm_phone_trigger")
+系统: Phone chain complete.
+=> END
 ```
 
-This prepares the next step: Dialogue Manager `do`/`set` mutations can call into game systems without making Dialogue Manager own the game state.
+Currently exposed bridge methods:
+
+```text
+bg(id)
+bgm(id = "stop")
+music(id = "stop")
+sfx(id = "none")
+show(character_id, pose = "neutral", slot = "center")
+hide(slot = "center")
+clear_chars()
+phone_open(screen = "inbox")
+phone_close()
+mail_receive(mail_id, sender, subject, body = "")
+mail_read(mail_id)
+mail_reply(mail_id, keyword)
+schedule_event(event_id, day, affection_character = "", affection_min = 0, required_flag = "")
+advance_day(delta = 1)
+add_affection(character_id, delta)
+set_flag(key, value = true)
+set_var(key, value)
+lock_route(route_id)
+set_worldline(value)
+unlock_tip(tip_id)
+unlock_cg(cg_id)
+```
+
+The bridge emits presentation commands into `VNDirector._on_command_requested()` and mutates central systems through `VNState`, `PhoneSystem`, `CalendarSystem`, and `RouteManager`.
 
 ## Import/bootstrap note
 
@@ -72,7 +109,7 @@ On a fresh checkout, run a Godot editor import once before headless runtime test
 godot --headless --editor --path . --quit-after 10
 ```
 
-This lets Godot register Dialogue Manager global classes and import `.dialogue` files. After that, runtime smoke tests can load `*.dialogue` resources normally.
+This registers Dialogue Manager global classes and imports `.dialogue` files into `.tres` resources.
 
 ## Validation
 
@@ -97,29 +134,26 @@ dialogue manager smoke ok
 qa: invalid save payload rejected
 ```
 
+`--galsystem-dm-smoke` now verifies both Dialogue Manager branches:
+
+- phone path: mail receive/read/reply, worldline, TIPS, CG;
+- calendar path: background, affection, scheduled event, route lock.
+
 ## Current limitations
 
-- Dialogue Manager backend is integrated and playable as a sample path, but the main Phase-1 chapter still uses `.galscript`.
-- Dialogue Manager save/load is only lightly snapshotted in `VNDirector` presentation state. Full DM conversation save/restore should be designed before migrating long chapters.
-- Dialogue Manager commands/mutations are not yet mapped to all VNDirector presentation commands.
-- The sample uses standard Dialogue Manager lines/responses, not a full custom DialogueLabel/balloon pipeline.
+- The main Phase-1 sample still uses `.galscript`; Dialogue Manager has a separate command-bridge sample.
+- Dialogue Manager save/load snapshots currently store resource path, next id, active flag, and presentation state. Before migrating long chapters, add a dedicated DM save/load regression around response-state and mid-choice restore.
+- `VNDirector.gd` still owns command execution; Phase 2 should split UI/presentation components.
+- Command bridge is code-based rather than generated from a central registry.
 
 ## Recommended next step
 
-Phase 2 should migrate one short real scene from `.galscript` to `.dialogue` and define a stable adapter command contract:
+Proceed with **Phase 2A: migrate one real short scene to `.dialogue`**.
 
-1. Create a command/mutation bridge for presentation commands:
-   - `bg(id)`
-   - `show(character, pose, slot)`
-   - `hide(slot)`
-   - `phone_open()` / `phone_close()`
-   - `mail_receive(...)`
-   - `schedule_event(...)`
-2. Decide how Dialogue Manager state checkpoints should be saved:
-   - resource path,
-   - current line id / next id,
-   - current responses,
-   - presentation snapshot,
-   - VNState / PhoneSystem / CalendarSystem / FlowchartSystem snapshots.
-3. Replace the sample Dialogue Manager text with a real VN scene.
-4. Keep `.galscript` as a fallback until the DM path passes the same branch/save/load tests.
+Acceptance for the next step:
+
+1. A real scene, not just the integration sample, is written in `.dialogue`.
+2. It uses presentation mutations for bg/show/hide/bgm/sfx.
+3. It uses either the phone chain or calendar/affection chain.
+4. It has a save/load smoke covering Dialogue Manager mid-scene and mid-choice state.
+5. `.galscript` remains as fallback until the DM scene passes equivalent validation.

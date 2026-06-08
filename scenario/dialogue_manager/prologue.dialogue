@@ -1,15 +1,33 @@
 ~ start
+do bg("dm_lab_evening")
+do bgm("dm_theme")
+do show("okabe", "serious", "center")
 系统: Dialogue Manager v3.10.4 已接入 galsystem。
-系统: 当前文本和选项来自 *.dialogue 资源，VNState、存档、手机、日程、Flow 等系统继续由 galsystem 负责。
+系统: 这一段来自 *.dialogue，并且已经能通过 do-mutation 驱动 VNDirector 演出命令。
 - 测试手机叙事接口 => phone_path
 - 测试日程/好感度接口 => calendar_path
 
 ~ phone_path
-系统: 这里适合迁移《命运石之门》式手机、邮件、关键词回复剧情。
-系统: 下一步可以把 PhoneSystem 命令做成 Dialogue Manager mutation 或 adapter command。
+do phone_open("inbox")
+do mail_receive("dm_sg001", "unknown", "世界线变动率", "Dialogue Manager 正在驱动手机邮件命令。")
+do mail_read("dm_sg001")
+do mail_reply("dm_sg001", "el_psy_congroo")
+do set_flag("dm_phone_branch_observed", true)
+do set_worldline("1.048596")
+do unlock_tip("dm_worldline_tips")
+do unlock_cg("dm_phone_trigger")
+系统: 这里是《命运石之门》式手机链：邮件接收、阅读、回复、世界线变化、TIPS/CG 解锁。
+do phone_close()
 => END
 
 ~ calendar_path
-系统: 这里适合迁移《白色相簿》式日程、好感度、路线锁定剧情。
-系统: 下一步可以把 CalendarSystem 和 RouteManager 暴露给 Dialogue Manager 的 extra_game_states。
+do bg("dm_music_room")
+do show("kazusa", "piano", "center")
+do set_flag("dm_visited_music_room", true)
+do add_affection("kazusa", 3)
+do schedule_event("dm_music_rehearsal", 2, "kazusa", 3, "dm_visited_music_room")
+do advance_day(1)
+do lock_route("kazusa")
+do set_flag("dm_calendar_branch_observed", true)
+系统: 这里是《白色相簿》式日程链：日期推进、好感度阈值、事件排程和路线锁定。
 => END

@@ -65,7 +65,7 @@ galsystem smoke ok
 
 ## Dialogue Manager integration update
 
-Dialogue Manager v3.10.4 is now installed under `addons/dialogue_manager/` and available as a second backend through `DialogueManagerAdapter.gd`. See `docs/DIALOGUE_MANAGER_INTEGRATION.md`.
+Dialogue Manager v3.10.4 is now installed under `addons/dialogue_manager/` and available as a second backend through `DialogueManagerAdapter.gd`. Its mutation bridge can now drive VN presentation/system commands from `.dialogue` files. See `docs/DIALOGUE_MANAGER_INTEGRATION.md`.
 
 Additional validation:
 

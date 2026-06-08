@@ -73,6 +73,7 @@ func _connect_runner() -> void:
 	ScenarioRunner.command_requested.connect(_on_command_requested)
 	ScenarioRunner.choices_presented.connect(_on_choices_presented)
 	ScenarioRunner.scenario_finished.connect(_on_scenario_finished)
+	DialogueManagerAdapter.command_requested.connect(_on_command_requested)
 
 func _has_cmdline_flag(flag: String) -> bool:
 	return flag in OS.get_cmdline_args() or flag in OS.get_cmdline_user_args()
@@ -819,20 +820,40 @@ func _run_invalid_save_qa() -> void:
 
 func _run_dialogue_manager_smoke() -> void:
 	assert(title_panel.visible)
-	await _start_dialogue_manager_sample()
-	assert(_dialogue_backend == "dialogue_manager")
-	assert(_current_full_text.contains("Dialogue Manager"))
-	await _advance_dialogue_manager()
-	assert(choice_box.visible)
-	await _choose_dialogue_manager_response(0)
-	assert(_current_full_text.contains("命运石之门"))
-	await _advance_dialogue_manager()
-	assert(_current_full_text.contains("PhoneSystem") or _current_full_text.contains("手机"))
-	await _advance_dialogue_manager()
-	assert(_current_full_text == "Phase 1 vertical slice demo ended.")
+	await _smoke_dialogue_manager_branch(0, "phone")
+	await _smoke_dialogue_manager_branch(1, "calendar")
 	DialogueManagerAdapter.reset()
 	print("dialogue manager smoke ok")
 	get_tree().quit(0)
+
+func _smoke_dialogue_manager_branch(choice_index: int, branch_name: String) -> void:
+	await _start_dialogue_manager_sample()
+	assert(_dialogue_backend == "dialogue_manager")
+	assert(_current_full_text.contains("Dialogue Manager"))
+	assert(background_label.text == "bg: dm_lab_evening")
+	assert(choice_box.visible == false)
+	await _advance_dialogue_manager()
+	assert(choice_box.visible)
+	await _choose_dialogue_manager_response(choice_index)
+	if branch_name == "phone":
+		assert(VNState.get_flag("mail_received_dm_sg001"))
+		assert(VNState.get_flag("mail_read_dm_sg001"))
+		assert(VNState.get_flag("mail_reply_dm_sg001"))
+		assert(VNState.get_flag("dm_phone_branch_observed"))
+		assert(VNState.worldline == "1.048596")
+		assert(VNState.unlocked_tips.has("dm_worldline_tips"))
+		assert(VNState.unlocked_cg.has("dm_phone_trigger"))
+		assert(_current_full_text.contains("命运石之门"))
+	else:
+		assert(VNState.get_flag("dm_visited_music_room"))
+		assert(VNState.get_flag("dm_calendar_branch_observed"))
+		assert(VNState.current_route == "kazusa")
+		assert(VNState.current_day >= 2)
+		assert(VNState.get_affection("kazusa") >= 3)
+		assert(background_label.text == "bg: dm_music_room")
+		assert(_current_full_text.contains("白色相簿"))
+	await _advance_dialogue_manager()
+	assert(_current_full_text == "Phase 1 vertical slice demo ended.")
 
 func _run_smoke_test() -> void:
 	assert(title_panel.visible)

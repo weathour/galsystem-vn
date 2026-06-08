@@ -2,8 +2,13 @@ extends Node
 ## Adapter boundary for Nathan Hoad's Dialogue Manager v3.x.
 ## Keeps VNDirector independent from Dialogue Manager internals and preserves the option
 ## to keep the self-built ScenarioRunner as a fallback backend.
+##
+## Dialogue files can call the bridge via mutations, e.g.:
+##   do bg("lab_evening")
+##   do show("okabe", "serious", "center")
+##   do mail_receive("sg001", "unknown", "subject", "body")
 
-const DEFAULT_EXTRA_STATES := []
+signal command_requested(command: String, args: Array)
 
 var resource: Resource
 var next_id: String = ""
@@ -73,6 +78,79 @@ func restore(data: Dictionary) -> bool:
 	resource = load(resource_path) if not resource_path.is_empty() else null
 	return resource != null or not active
 
+# ── Dialogue Manager mutation bridge ───────────────────────────────
+
+func bg(id: String) -> void:
+	_emit_command("bg", [id])
+
+func bgm(id: String = "stop") -> void:
+	_emit_command("bgm", [id])
+
+func music(id: String = "stop") -> void:
+	_emit_command("music", [id])
+
+func sfx(id: String = "none") -> void:
+	_emit_command("sfx", [id])
+
+func show(character_id: String, pose: String = "neutral", slot: String = "center") -> void:
+	_emit_command("show", [character_id, pose, slot])
+
+func hide(slot: String = "center") -> void:
+	_emit_command("hide", [slot])
+
+func clear_chars() -> void:
+	_emit_command("clear_chars", [])
+
+func phone_open(screen: String = "inbox") -> void:
+	_emit_command("phone", [screen])
+
+func phone_close() -> void:
+	_emit_command("phone", ["close"])
+
+func mail_receive(mail_id: String, sender: String, subject: String, body: String = "") -> void:
+	_emit_command("mail", [mail_id, sender, subject, body])
+
+func mail_read(mail_id: String) -> void:
+	_emit_command("read_mail", [mail_id])
+
+func mail_reply(mail_id: String, keyword: String) -> void:
+	_emit_command("reply_mail", [mail_id, keyword])
+
+func schedule_event(event_id: String, day: int, affection_character: String = "", affection_min: int = 0, required_flag: String = "") -> void:
+	var args: Array = [event_id, str(day), affection_character, str(affection_min)]
+	if not required_flag.is_empty():
+		args.append(required_flag)
+	_emit_command("schedule_event", args)
+
+func advance_day(delta: int = 1) -> void:
+	_emit_command("advance_day", [str(delta)])
+
+func add_affection(character_id: String, delta: int) -> void:
+	VNState.add_affection(character_id, delta)
+
+func set_flag(key: String, value: bool = true) -> void:
+	VNState.set_flag(key, value)
+
+func set_var(key: String, value: Variant) -> void:
+	VNState.set_var(key, value)
+
+func lock_route(route_id: String) -> void:
+	RouteManager.lock_route(route_id)
+
+func set_worldline(value: String) -> void:
+	VNState.worldline = value
+
+func unlock_tip(tip_id: String) -> void:
+	_emit_command("tip", [tip_id])
+
+func unlock_cg(cg_id: String) -> void:
+	_emit_command("cg", [cg_id])
+
+func _emit_command(command: String, args: Array) -> void:
+	command_requested.emit(command, args)
+
+# ── Conversion ─────────────────────────────────────────────────────
+
 func _line_to_dictionary(line: Variant) -> Dictionary:
 	var responses: Array[Dictionary] = []
 	for response in line.responses:
@@ -93,7 +171,7 @@ func _line_to_dictionary(line: Variant) -> Dictionary:
 	}
 
 func _extra_states() -> Array:
-	var states: Array = []
+	var states: Array = [self]
 	if has_node("/root/VNState"):
 		states.append(VNState)
 	if has_node("/root/PhoneSystem"):
