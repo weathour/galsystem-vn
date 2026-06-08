@@ -16,7 +16,7 @@ Current status:
 - Centralized story state.
 - Phone/mail prototype for Steins;Gate-like triggers.
 - Calendar/affection prototype for White Album-like route conditions.
-- Static `.galscript` lint.
+- Static `.galscript` lint driven by `scenario/command_registry.json`.
 - Headless smoke test with deterministic branch and save/load assertions.
 - Dialogue Manager `.dialogue` backend with `scenario/dialogue_manager/chapter_01.dialogue` as the current DM short-chapter entry and a mutation bridge for bg/show/bgm/sfx, phone/mail, calendar/affection, route, worldline, TIPS, and CG commands.
 - Dialogue Manager mid-choice save/load regression.
@@ -131,12 +131,13 @@ end
 - `scripts/systems/PhoneSystem.gd`: phone/mail prototype state.
 - `scripts/systems/CalendarSystem.gd`: day/event/affection scheduler state.
 - `scripts/presentation/VNDirector.gd`: presentation shell and command dispatch.
+- `scenario/command_registry.json`: shared command contract used by lint and checked against Dialogue Manager mutations.
 
 ## Phase 2 follow-ups
 
-- Harden shared command contracts now that `.galscript` and Dialogue Manager both drive the same VN shell.
+- Use `scenario/command_registry.json` as the command-contract source of truth and extend it into docs/runtime checks.
 - Split `VNDirector.gd` into scene components (`TitleMenu`, `DialogueBox`, `ChoiceMenu`, `SaveLoadUI`, `DebugPanel`, `FlowPanel`).
-- Extract scenario command contracts into a shared registry/adapter layer so `.galscript`, Dialogue Manager, lint, docs, and smoke tests cannot drift.
+- Keep extending `scenario/command_registry.json` so `.galscript`, Dialogue Manager, lint, docs, and smoke tests cannot drift.
 - Expand phone UI and calendar/event UI beyond the current prototype panels.
 
 ## Dialogue Manager integration update

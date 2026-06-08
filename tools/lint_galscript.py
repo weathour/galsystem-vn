@@ -3,33 +3,56 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 import tempfile
 import sys
 
-KNOWN_COMMANDS = {
-    "label", "jump", "choice", "if_flag", "if_var", "if_affection", "if_calendar_event",
-    "say", "narr", "set_flag", "set_var", "affection", "route", "chapter", "day", "worldline",
-    "show", "hide", "bg", "mail", "read_mail", "reply_mail", "schedule_event", "advance_day",
-    "phone", "clear_chars", "bgm", "music", "sfx", "cg", "tip", "end",
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REGISTRY_PATH = PROJECT_ROOT / "scenario" / "command_registry.json"
+DM_ADAPTER_PATH = PROJECT_ROOT / "scripts" / "systems" / "DialogueManagerAdapter.gd"
+
+
+def load_registry() -> dict[str, dict]:
+    data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    commands = data.get("commands", {})
+    if not isinstance(commands, dict) or not commands:
+        raise RuntimeError(f"invalid command registry: {REGISTRY_PATH}")
+    return commands
+
+
+COMMAND_REGISTRY = load_registry()
+KNOWN_COMMANDS = set(COMMAND_REGISTRY.keys())
+TARGET_COMMANDS = {
+    command: spec.get("target_args", [])
+    for command, spec in COMMAND_REGISTRY.items()
+    if spec.get("target_args")
 }
-TARGET_COMMANDS = {"jump": [0], "if_flag": [1, 2], "if_var": [2, 3], "if_affection": [2, 3], "if_calendar_event": [1, 2]}
-MIN_ARGS = {
-    "label": 1, "jump": 1, "choice": 1, "if_flag": 3, "if_var": 4, "if_affection": 4,
-    "if_calendar_event": 3, "say": 1, "narr": 1, "set_flag": 1, "set_var": 2,
-    "affection": 2, "route": 1, "chapter": 1, "day": 1, "worldline": 1, "show": 1,
-    "hide": 1, "bg": 1, "mail": 3, "read_mail": 1, "reply_mail": 2, "schedule_event": 2,
-    "advance_day": 0, "phone": 0, "clear_chars": 0, "bgm": 0, "music": 0, "sfx": 0,
-    "cg": 1, "tip": 1, "end": 0,
-}
+MIN_ARGS = {command: int(spec.get("min_args", 0)) for command, spec in COMMAND_REGISTRY.items()}
 INT_ARGS = {
-    "day": [0],
-    "advance_day": [0],
-    "affection": [1],
-    "if_affection": [1],
-    "schedule_event": [1, 3],
+    command: spec.get("int_args", [])
+    for command, spec in COMMAND_REGISTRY.items()
+    if spec.get("int_args")
 }
+
+
+def validate_registry() -> list[str]:
+    errors: list[str] = []
+    adapter_source = DM_ADAPTER_PATH.read_text(encoding="utf-8") if DM_ADAPTER_PATH.exists() else ""
+    adapter_funcs = set(re.findall(r"^func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", adapter_source, re.MULTILINE))
+    for command, spec in COMMAND_REGISTRY.items():
+        if int(spec.get("min_args", 0)) < 0:
+            errors.append(f"registry command '{command}' has negative min_args")
+        mutation_names = []
+        for key in ["dm_mutation", "dm_open_mutation", "dm_close_mutation"]:
+            if spec.get(key):
+                mutation_names.append(str(spec[key]))
+        for mutation in mutation_names:
+            if mutation not in adapter_funcs:
+                errors.append(f"registry command '{command}' references missing DialogueManagerAdapter mutation '{mutation}'")
+    return errors
 
 @dataclass
 class ParsedLine:
@@ -110,7 +133,7 @@ def lint_file(path: Path) -> list[str]:
         for arg_idx in INT_ARGS.get(line.op, []):
             if len(line.args) > arg_idx and not is_int(line.args[arg_idx]):
                 errors.append(f"{line.file}:{line.line_no}: command '{line.op}' argument {arg_idx + 1} must be an integer, got '{line.args[arg_idx]}'")
-        if line.op == "choice":
+        if bool(COMMAND_REGISTRY[line.op].get("choice_targets", False)):
             targets = choice_targets(line.args[0] if line.args else "")
             if not targets:
                 errors.append(f"{line.file}:{line.line_no}: choice requires at least one text->label target")
@@ -125,6 +148,12 @@ def lint_file(path: Path) -> list[str]:
 
 
 def run_self_test() -> int:
+    registry_errors = validate_registry()
+    if registry_errors:
+        print("galscript lint self-test failed:")
+        for error in registry_errors:
+            print(f"- {error}")
+        return 1
     cases = {
         "unknown": "label start\ntypo_command foo\nend\n",
         "bad_numeric": "label start\naffection kazusa nope\nend\n",
@@ -162,7 +191,7 @@ def main() -> int:
     if not scripts:
         print("galscript lint: no scripts found", file=sys.stderr)
         return 1
-    errors: list[str] = []
+    errors: list[str] = validate_registry()
     for script in scripts:
         errors.extend(lint_file(script))
     if errors:

@@ -101,7 +101,7 @@ unlock_tip(tip_id)
 unlock_cg(cg_id)
 ```
 
-The bridge emits presentation commands into `VNDirector._on_command_requested()` and mutates central systems through `VNState`, `PhoneSystem`, `CalendarSystem`, and `RouteManager`.
+The bridge emits presentation commands into `VNDirector._on_command_requested()` and mutates central systems through `VNState`, `PhoneSystem`, `CalendarSystem`, and `RouteManager`. `scenario/command_registry.json` records the shared command contract and `tools/lint_galscript.py --self-test` verifies that registered Dialogue Manager mutation names exist on `DialogueManagerAdapter`.
 
 ## Import/bootstrap note
 
@@ -155,7 +155,7 @@ Proceed with **Phase 2D: harden command contracts and split UI/presentation boun
 
 Acceptance for the next step:
 
-1. A shared command registry describes every scenario command and Dialogue Manager mutation.
-2. `ScenarioRunner`, `DialogueManagerAdapter`, `VNDirector`, lint, and docs are generated from or checked against that registry.
+1. Promote `scenario/command_registry.json` from lint-time validation into runtime command dispatch checks.
+2. `VNDirector` command execution is split out of the UI shell.
 3. Save/load smoke also covers Dialogue Manager branch-after-save state.
 4. The first UI split extracts at least `DialogueBox` or `ChoiceMenu` without changing smoke behavior.

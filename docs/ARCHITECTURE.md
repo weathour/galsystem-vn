@@ -30,7 +30,7 @@ Phase 1 完成的是 **ADV Core Vertical Slice**。当前已进入 Phase 2：Dia
 - Flow 面板显示当前 label、visited labels、choice history。
 - 手机链：mail received -> read -> reply -> worldline/TIPS/CG -> branch observed。
 - 日程链：advance day -> affection threshold -> scheduled event -> route lock。
-- `.galscript` 静态 lint。
+- `.galscript` 静态 lint；命令/参数规则来自 `scenario/command_registry.json`。
 - Headless smoke 对两条分支做确定性断言。
 - Dialogue Manager smoke 对手机分支、日程分支、命令桥接和选择肢前存/读档做确定性断言。
 
@@ -53,7 +53,7 @@ galsystem smoke ok
 
 ## 后续推荐顺序
 
-1. 抽出命令注册表/命令执行层，减少 `ScenarioRunner`、`DialogueManagerAdapter`、`VNDirector`、lint 和文档之间的约定漂移。
+1. 继续把 `scenario/command_registry.json` 扩展为运行时命令注册/执行层，减少 `ScenarioRunner`、`DialogueManagerAdapter`、`VNDirector`、lint 和文档之间的约定漂移。
 2. 把当前代码生成 UI 逐步拆为 `DialogueBox.tscn`、`ChoiceMenu.tscn`、`SystemMenu.tscn`、`SaveLoadUI.tscn`。
 3. 扩展 `PhoneUI.tscn`：短信收件箱、电话接听、关键词回复。
 4. 实现更正式的 `FlowchartSystem` UI：章节跳转和路线图，但保持 Phase-2 范围。
@@ -62,7 +62,7 @@ galsystem smoke ok
 ## Phase 2 follow-ups
 
 - Split `VNDirector.gd` into scene components (`TitleMenu`, `DialogueBox`, `ChoiceMenu`, `SaveLoadUI`, `DebugPanel`, `FlowPanel`).
-- Extract scenario command contracts into a shared registry/adapter layer now that both `.galscript` and Dialogue Manager use the same VN shell.
+- Extend `scenario/command_registry.json` from lint/DM-mutation checking into runtime command dispatch checks.
 - Move more branch/system command handling out of `ScenarioRunner.gd` when replacing it with a dialogue adapter.
 
 ## Dialogue Manager integration update

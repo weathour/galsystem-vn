@@ -43,7 +43,8 @@ Phase 1 originally shipped with a self-built `.galscript` core. Phase 2 has sinc
 ### Scenario tooling
 
 - `scenario/common/prologue.galscript`: Phase-1 sample chapter.
-- `tools/lint_galscript.py`: static `.galscript` lint.
+- `scenario/command_registry.json`: shared command contract.
+- `tools/lint_galscript.py`: static `.galscript` lint driven by the command registry.
 - Lint detects:
   - missing labels,
   - duplicate labels,
@@ -145,7 +146,7 @@ These are accepted Phase-1 limitations, not current blockers:
 4. Expand `FlowchartSystem` into a chapter/route map prototype.
 5. Add a more complete event scheduler for calendar + affection + flags + route conditions.
 6. Continue hardening Dialogue Manager save/load beyond the current mid-choice smoke.
-7. Extract command contracts and begin splitting UI components.
+7. Extend the command registry into runtime dispatch checks and begin splitting UI components.
 
 ## Safe continuation rule
 
