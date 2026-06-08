@@ -52,6 +52,7 @@ var _dialogue_backend: String = "galscript"
 var _narcissu_executor: RefCounted
 var _last_media_status: Dictionary = {}
 var _narcissu_smoke_failed: bool = false
+var _dm_smoke_failed: bool = false
 
 enum SaveLoadMode { SAVE, LOAD }
 var _save_load_mode: SaveLoadMode = SaveLoadMode.SAVE
@@ -584,7 +585,8 @@ func _on_choices_presented(choices: Array[Dictionary]) -> void:
 	choice_box.visible = true
 
 func _on_command_requested(command: String, args: Array) -> void:
-	if _narcissu_executor != null and bool(_narcissu_executor.call("handles", command)):
+	var narcissu_script_active := _dialogue_backend == "galscript" and str(ScenarioRunner.get_checkpoint().get("path", "")).contains("/reference_private/narcissu/")
+	if _narcissu_executor != null and bool(_narcissu_executor.call("handles", command, narcissu_script_active)):
 		if bool(_narcissu_executor.call("execute", command, args)):
 			return
 	match command:
@@ -1152,53 +1154,85 @@ func _run_invalid_save_qa() -> void:
 	print("qa: invalid save payload rejected")
 	get_tree().quit(0)
 
+func _dm_smoke_fail(message: String) -> void:
+	_dm_smoke_failed = true
+	push_error("dialogue manager smoke failed: %s" % message)
+	get_tree().quit(1)
+
+func _dm_smoke_require(condition: bool, message: String) -> bool:
+	if not condition:
+		_dm_smoke_fail(message)
+		return false
+	return true
+
 func _run_dialogue_manager_smoke() -> void:
-	assert(title_panel.visible)
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://.godot/imported")):
+		print("dialogue manager smoke skipped: run `godot --headless --editor --path . --quit-after 10` once on fresh checkout")
+		get_tree().quit(0)
+		return
+	_dm_smoke_failed = false
+	if not _dm_smoke_require(title_panel.visible, "title panel visible"):
+		return
 	await _smoke_dialogue_manager_branch(0, "phone")
+	if _dm_smoke_failed:
+		return
 	await _smoke_dialogue_manager_branch(1, "calendar")
+	if _dm_smoke_failed:
+		return
 	DialogueManagerAdapter.reset()
 	print("dialogue manager smoke ok")
 	get_tree().quit(0)
 
 func _smoke_dialogue_manager_branch(choice_index: int, branch_name: String) -> void:
 	await _start_dialogue_manager_sample()
-	assert(_dialogue_backend == "dialogue_manager")
-	assert(_current_full_text.contains("Chapter 01"))
-	assert(background_label.text == "bg: dm_winter_school_gate")
-	assert(choice_box.visible == false)
+	if not _dm_smoke_require(_dialogue_backend == "dialogue_manager", "backend selected"):
+		return
+	if not _dm_smoke_require(_current_full_text.contains("Chapter 01"), "first DM line presented"):
+		return
+	if not _dm_smoke_require(background_label.text == "bg: dm_winter_school_gate", "initial DM background"):
+		return
+	if not _dm_smoke_require(choice_box.visible == false, "choice hidden before branch"):
+		return
 	await _advance_dialogue_manager_until_choice(16)
-	assert(choice_box.visible)
+	if not _dm_smoke_require(choice_box.visible, "choice visible"):
+		return
 	var before_save := _dm_critical_snapshot()
-	assert(SaveSystem.save_slot(2, _presentation_snapshot()))
+	if not _dm_smoke_require(SaveSystem.save_slot(2, _presentation_snapshot()), "save slot"):
+		return
 	var payload := SaveSystem.load_slot(2)
-	assert(not payload.is_empty())
+	if not _dm_smoke_require(not payload.is_empty(), "load slot"):
+		return
 	_restore_presentation(payload.get("presentation", {}))
 	_refresh_dialogue_manager_display()
 	var after_load := _dm_critical_snapshot()
-	assert(before_save.get("text") == after_load.get("text"))
-	assert(before_save.get("choice_visible") == after_load.get("choice_visible"))
-	assert(before_save.get("response_count") == after_load.get("response_count"))
-	assert(after_load.get("backend") == "dialogue_manager")
+	if not _dm_smoke_require(before_save.get("text") == after_load.get("text"), "restore text"):
+		return
+	if not _dm_smoke_require(before_save.get("choice_visible") == after_load.get("choice_visible"), "restore choice visibility"):
+		return
+	if not _dm_smoke_require(before_save.get("response_count") == after_load.get("response_count"), "restore response count"):
+		return
+	if not _dm_smoke_require(after_load.get("backend") == "dialogue_manager", "restore backend"):
+		return
 	await _choose_dialogue_manager_response(choice_index)
 	if branch_name == "phone":
-		assert(VNState.get_flag("mail_received_dm_sg001"))
-		assert(VNState.get_flag("mail_read_dm_sg001"))
-		assert(VNState.get_flag("mail_reply_dm_sg001"))
-		assert(VNState.get_flag("dm_phone_branch_observed"))
-		assert(VNState.worldline == "1.048596")
-		assert(VNState.unlocked_tips.has("dm_worldline_tips"))
-		assert(VNState.unlocked_cg.has("dm_phone_trigger"))
-		assert(_current_full_text.contains("命运石之门"))
+		if not _dm_smoke_require(VNState.get_flag("mail_received_dm_sg001") and VNState.get_flag("mail_read_dm_sg001") and VNState.get_flag("mail_reply_dm_sg001"), "phone mail flags"):
+			return
+		if not _dm_smoke_require(VNState.get_flag("dm_phone_branch_observed") and VNState.worldline == "1.048596", "phone branch state"):
+			return
+		if not _dm_smoke_require(VNState.unlocked_tips.has("dm_worldline_tips") and VNState.unlocked_cg.has("dm_phone_trigger"), "phone unlocks"):
+			return
+		if not _dm_smoke_require(_current_full_text.contains("命运石之门"), "phone branch text"):
+			return
 	else:
-		assert(VNState.get_flag("dm_visited_music_room"))
-		assert(VNState.get_flag("dm_calendar_branch_observed"))
-		assert(VNState.current_route == "kazusa")
-		assert(VNState.current_day >= 2)
-		assert(VNState.get_affection("kazusa") >= 3)
-		assert(background_label.text == "bg: dm_music_room")
-		assert(_current_full_text.contains("白色相簿"))
+		if not _dm_smoke_require(VNState.get_flag("dm_visited_music_room") and VNState.get_flag("dm_calendar_branch_observed"), "calendar flags"):
+			return
+		if not _dm_smoke_require(VNState.current_route == "kazusa" and VNState.current_day >= 2 and VNState.get_affection("kazusa") >= 3, "calendar route state"):
+			return
+		if not _dm_smoke_require(background_label.text == "bg: dm_music_room" and _current_full_text.contains("白色相簿"), "calendar presentation"):
+			return
 	await _advance_dialogue_manager()
-	assert(_current_full_text == "Phase 1 vertical slice demo ended.")
+	if not _dm_smoke_require(_current_full_text == "Phase 1 vertical slice demo ended.", "DM ending"):
+		return
 
 func _run_smoke_test() -> void:
 	assert(title_panel.visible)

@@ -329,16 +329,16 @@ def convert_text(text: str, output: Path, *, start_label: str | None = None, max
 def run_self_test() -> int:
     sample = """
 *start
-bg "e\\b.jpg",5
-mp3loop "bgm2\\2sou01.mp3"
-mp3 "bgm2\\once.mp3"
+bg "synthetic_bg\\blue_card.png",5
+mp3loop "synthetic_audio\\loop_theme.mp3"
+mp3 "synthetic_audio\\one_shot.mp3"
 mp3fadeout 1500
 ^~i~A first line.\\
-dwave 5,"se\\ele2.ogg"
-dwaveloop 0,"voice\\v001.ogg"
+dwave 5,"synthetic_sfx\\click.ogg"
+dwaveloop 0,"synthetic_voice\\line001.ogg"
 dwavestop 5
-lsp 200,"fg\\sprite.png",0,0
-lsph 201,"fg\\hidden.png",10,20
+lsp 200,"synthetic_fg\\sprite.png",0,0
+lsph 201,"synthetic_fg\\hidden.png",10,20
 vsp 200,1
 csp 200
 print 3
@@ -357,7 +357,7 @@ csel ^Go left^,*left,
 ^Sub branch.\\
 return
 *left
-h_usewindow "window\\frame.png"
+h_usewindow "synthetic_ui\\frame.png"
 erasetextwindow 0
 ^Left branch.\\
 goto *end_label
@@ -372,14 +372,14 @@ stop
         stats = convert_text(sample, out, title="self test")
         generated = out.read_text(encoding="utf-8")
         expected = [
-            'label start', 'narcissu_bg "e\\\\b.jpg" 5', 'narcissu_bgm "bgm2\\\\2sou01.mp3" loop',
-            'narcissu_bgm "bgm2\\\\once.mp3" once', 'narcissu_bgm_fadeout 1500', 'narr|A first line.',
-            'narcissu_sfx 5 "se\\\\ele2.ogg" once', 'narcissu_voice 0 "voice\\\\v001.ogg" loop',
-            'narcissu_sfx_stop 5', 'narcissu_lsp 200 "fg\\\\sprite.png" 0 0', 'narcissu_lsph 201 "fg\\\\hidden.png" 10 20',
+            'label start', 'narcissu_bg "synthetic_bg\\\\blue_card.png" 5', 'narcissu_bgm "synthetic_audio\\\\loop_theme.mp3" loop',
+            'narcissu_bgm "synthetic_audio\\\\one_shot.mp3" once', 'narcissu_bgm_fadeout 1500', 'narr|A first line.',
+            'narcissu_sfx 5 "synthetic_sfx\\\\click.ogg" once', 'narcissu_voice 0 "synthetic_voice\\\\line001.ogg" loop',
+            'narcissu_sfx_stop 5', 'narcissu_lsp 200 "synthetic_fg\\\\sprite.png" 0 0', 'narcissu_lsph 201 "synthetic_fg\\\\hidden.png" 10 20',
             'narcissu_vsp 200 1', 'narcissu_csp 200', 'narcissu_print 3', 'wait 500', 'wait 1500',
             'set_value 11 1', 'add_value 11 2', 'sub_value 11 1', 'mul_value 11 8',
             'if_expr "%11>=1" goto left', 'call sub_label', 'tablegoto 11 start left right',
-            'choice Go left->left|Go right->right', 'label sub_label', 'return', 'narcissu_window "window\\\\frame.png"',
+            'choice Go left->left|Go right->right', 'label sub_label', 'return', 'narcissu_window "synthetic_ui\\\\frame.png"',
             'narcissu_erasetextwindow 0', 'jump end_label', 'narcissu_bgm_stop', 'end']
         missing = [line for line in expected if line not in generated]
         if missing:

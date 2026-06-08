@@ -176,15 +176,15 @@ def run_self_test() -> int:
         (root / 'bgm2').mkdir(parents=True)
         (root / 'se').mkdir(parents=True)
         (root / 'voice').mkdir(parents=True)
-        for rel in ['haeleth/2/h000.png', 'bgm2/2sou01.mp3', 'se/ele2.ogg', 'voice/v001.ogg']:
+        for rel in ['synthetic_bg/blue_card.png', 'synthetic_audio/loop_theme.mp3', 'synthetic_sfx/click.ogg', 'synthetic_voice/line001.ogg']:
             (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_bytes(b'synthetic')
         script = Path(tmp) / 'sample.utf'
         script.write_text('\n'.join([
-            'bg "haeleth\\2\\h000.png",3',
-            'mp3loop "bgm2\\2sou01.mp3"',
-            'dwave 5,"se\\ele2.ogg"',
-            'dwave 0,"voice\\v001.ogg"',
+            'bg "synthetic_bg\\blue_card.png",3',
+            'mp3loop "synthetic_audio\\loop_theme.mp3"',
+            'dwave 5,"synthetic_sfx\\click.ogg"',
+            'dwave 0,"synthetic_voice\\line001.ogg"',
         ]), encoding='utf-8')
         manifest, report = build_manifest(root, [script])
         if report.resolved_assets != 4 or report.missing_assets != 0:

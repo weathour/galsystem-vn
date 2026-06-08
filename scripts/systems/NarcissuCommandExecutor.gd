@@ -29,8 +29,8 @@ func reset_runtime_flags() -> void:
 func has_private_media() -> bool:
 	return resolver.has_private_media()
 
-func handles(command: String) -> bool:
-	return command.begins_with("narcissu_") or command in ["bgm", "music", "sfx"]
+func handles(command: String, narcissu_script_active: bool = true) -> bool:
+	return command.begins_with("narcissu_") or (narcissu_script_active and command in ["bgm", "music", "sfx"])
 
 func execute(command: String, args: Array) -> bool:
 	match command:
