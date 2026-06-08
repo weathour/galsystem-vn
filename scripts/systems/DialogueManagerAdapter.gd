@@ -13,12 +13,16 @@ signal command_requested(command: String, args: Array)
 var resource: Resource
 var next_id: String = ""
 var current_line: Variant = null
+var current_display: Dictionary = {}
+var current_responses: Array[Dictionary] = []
 var active: bool = false
 var resource_path: String = ""
 
 func reset() -> void:
 	resource = null
 	current_line = null
+	current_display.clear()
+	current_responses.clear()
 	next_id = ""
 	active = false
 	resource_path = ""
@@ -41,34 +45,45 @@ func get_next_line() -> Dictionary:
 	if typeof(line) == TYPE_DICTIONARY and line.is_empty():
 		active = false
 		current_line = null
+		current_display.clear()
+		current_responses.clear()
 		return {}
 	if line == null:
 		active = false
 		current_line = null
+		current_display.clear()
+		current_responses.clear()
 		return {}
 	current_line = line
 	next_id = str(line.next_id)
-	return _line_to_dictionary(line)
+	current_display = _line_to_dictionary(line)
+	current_responses.clear()
+	for response in current_display.get("responses", []):
+		if typeof(response) == TYPE_DICTIONARY:
+			current_responses.append(response.duplicate(true))
+	return current_display.duplicate(true)
 
 func choose_response(index: int) -> Dictionary:
-	if current_line == null:
-		return {}
-	var responses: Array = current_line.responses
-	if index < 0 or index >= responses.size():
+	if index < 0 or index >= current_responses.size():
 		push_error("DialogueManagerAdapter: invalid response index %d" % index)
 		return {}
-	var response: Variant = responses[index]
-	next_id = str(response.next_id)
+	var response: Dictionary = current_responses[index]
+	next_id = str(response.get("next_id", ""))
 	return await get_next_line()
 
 func has_responses() -> bool:
-	return current_line != null and current_line.responses.size() > 0
+	return not current_responses.is_empty()
+
+func get_current_display() -> Dictionary:
+	return current_display.duplicate(true)
 
 func snapshot() -> Dictionary:
 	return {
 		"resource_path": resource_path,
 		"next_id": next_id,
 		"active": active,
+		"current_display": current_display.duplicate(true),
+		"current_responses": current_responses.duplicate(true),
 	}
 
 func restore(data: Dictionary) -> bool:
@@ -76,6 +91,12 @@ func restore(data: Dictionary) -> bool:
 	next_id = str(data.get("next_id", ""))
 	active = bool(data.get("active", false))
 	resource = load(resource_path) if not resource_path.is_empty() else null
+	current_line = null
+	current_display = data.get("current_display", {}).duplicate(true)
+	current_responses.clear()
+	for response in data.get("current_responses", []):
+		if typeof(response) == TYPE_DICTIONARY:
+			current_responses.append(response.duplicate(true))
 	return resource != null or not active
 
 # ── Dialogue Manager mutation bridge ───────────────────────────────

@@ -2,7 +2,7 @@
 
 Godot 4.6 ADV/Galgame skeleton for long-form games similar to *White Album* and *Steins;Gate*.
 
-## Phase 1 status
+## Current status
 
 Phase 1 targets an **ADV Core Vertical Slice**: a small but verifiable self-built system slice, not a final commercial VN engine.
 
@@ -18,8 +18,10 @@ Current status:
 - Calendar/affection prototype for White Album-like route conditions.
 - Static `.galscript` lint.
 - Headless smoke test with deterministic branch and save/load assertions.
+- Dialogue Manager `.dialogue` backend with mutation bridge for bg/show/bgm/sfx, phone/mail, calendar/affection, route, worldline, TIPS, and CG commands.
+- Dialogue Manager mid-choice save/load regression.
 
-Dialogue Manager is **not imported yet**. The current architecture keeps `ScenarioRunner.gd` replaceable so a future Dialogue Manager adapter can replace the runner without rewriting VN state, save/load, phone/calendar, flow tracking, or presentation systems.
+Dialogue Manager v3.10.4 is now imported as a second backend. The self-built `ScenarioRunner.gd` remains available as the fallback path while `.dialogue` scenes are promoted into the main workflow.
 
 ## Run
 
@@ -132,9 +134,10 @@ end
 
 ## Phase 2 follow-ups
 
+- Promote one real chapter scene from `.galscript` into `.dialogue` and make it the default start path once parity is proven.
 - Split `VNDirector.gd` into scene components (`TitleMenu`, `DialogueBox`, `ChoiceMenu`, `SaveLoadUI`, `DebugPanel`, `FlowPanel`).
-- Extract scenario command contracts into a shared registry/adapter layer before importing Dialogue Manager.
-- Move more branch/system command handling out of `ScenarioRunner.gd` when replacing it with a dialogue adapter.
+- Extract scenario command contracts into a shared registry/adapter layer so `.galscript`, Dialogue Manager, lint, docs, and smoke tests cannot drift.
+- Expand phone UI and calendar/event UI beyond the current prototype panels.
 
 ## Dialogue Manager integration update
 

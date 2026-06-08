@@ -417,18 +417,25 @@ func _choose_dialogue_manager_response(index: int) -> void:
 	var line := await DialogueManagerAdapter.choose_response(index)
 	_present_dialogue_manager_line(line)
 
-func _present_dialogue_manager_line(line: Dictionary) -> void:
+func _present_dialogue_manager_line(line: Dictionary, record_history: bool = true) -> void:
 	if line.is_empty():
 		_on_scenario_finished()
 		return
-	FlowchartSystem.visit_label("dm:%s" % str(line.get("id", "")))
-	_on_line_presented(str(line.get("speaker", "")), str(line.get("text", "")))
+	var flow_label := "dm:%s" % str(line.get("id", ""))
+	if record_history:
+		FlowchartSystem.visit_label(flow_label)
+	var speaker := str(line.get("speaker", ""))
+	var text := str(line.get("text", ""))
+	if record_history:
+		VNState.add_backlog(speaker, text)
+	_on_line_presented(speaker, text)
 	var responses: Array = line.get("responses", [])
 	if not responses.is_empty():
 		_finish_typewriter()
 		for child in choice_box.get_children():
 			child.queue_free()
-		FlowchartSystem.record_choice(FlowchartSystem.current_label, responses)
+		if record_history:
+			FlowchartSystem.record_choice(flow_label, responses)
 		for i in range(responses.size()):
 			var response_index := i
 			var button := Button.new()
@@ -438,6 +445,13 @@ func _present_dialogue_manager_line(line: Dictionary) -> void:
 			)
 			choice_box.add_child(button)
 		choice_box.visible = true
+
+func _refresh_dialogue_manager_display() -> void:
+	var line := DialogueManagerAdapter.get_current_display()
+	if line.is_empty():
+		_on_scenario_finished()
+	else:
+		_present_dialogue_manager_line(line, false)
 
 func _update_typewriter(delta: float) -> void:
 	if not _typing:
@@ -690,7 +704,10 @@ func _load_slot(slot_id: int) -> void:
 	dialogue_panel.visible = true
 	_game_started = true
 	_restore_presentation(payload.get("presentation", {}))
-	ScenarioRunner.refresh_display()
+	if _dialogue_backend == "dialogue_manager":
+		_refresh_dialogue_manager_display()
+	else:
+		ScenarioRunner.refresh_display()
 	_set_status("已读取 Slot %d" % slot_id)
 
 func _toggle_debug_panel() -> void:
@@ -834,6 +851,17 @@ func _smoke_dialogue_manager_branch(choice_index: int, branch_name: String) -> v
 	assert(choice_box.visible == false)
 	await _advance_dialogue_manager()
 	assert(choice_box.visible)
+	var before_save := _dm_critical_snapshot()
+	assert(SaveSystem.save_slot(2, _presentation_snapshot()))
+	var payload := SaveSystem.load_slot(2)
+	assert(not payload.is_empty())
+	_restore_presentation(payload.get("presentation", {}))
+	_refresh_dialogue_manager_display()
+	var after_load := _dm_critical_snapshot()
+	assert(before_save.get("text") == after_load.get("text"))
+	assert(before_save.get("choice_visible") == after_load.get("choice_visible"))
+	assert(before_save.get("response_count") == after_load.get("response_count"))
+	assert(after_load.get("backend") == "dialogue_manager")
 	await _choose_dialogue_manager_response(choice_index)
 	if branch_name == "phone":
 		assert(VNState.get_flag("mail_received_dm_sg001"))
@@ -937,4 +965,20 @@ func _critical_snapshot() -> Dictionary:
 		"flags": VNState.flags.duplicate(true),
 		"affection": VNState.affection.duplicate(true),
 		"phone_inbox": PhoneSystem.inbox.duplicate(true),
+	}
+
+func _dm_critical_snapshot() -> Dictionary:
+	var line := DialogueManagerAdapter.get_current_display()
+	var responses: Array = line.get("responses", [])
+	return {
+		"backend": _dialogue_backend,
+		"speaker": speaker_label.text,
+		"text": _current_full_text,
+		"choice_visible": choice_box.visible,
+		"response_count": responses.size(),
+		"resource_path": str(DialogueManagerAdapter.snapshot().get("resource_path", "")),
+		"background": background_label.text,
+		"day": VNState.current_day,
+		"route": VNState.current_route,
+		"worldline": VNState.worldline,
 	}

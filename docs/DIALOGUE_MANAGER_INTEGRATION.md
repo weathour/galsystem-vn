@@ -137,23 +137,24 @@ qa: invalid save payload rejected
 `--galsystem-dm-smoke` now verifies both Dialogue Manager branches:
 
 - phone path: mail receive/read/reply, worldline, TIPS, CG;
-- calendar path: background, affection, scheduled event, route lock.
+- calendar path: background, affection, scheduled event, route lock;
+- choice restore: save/load while the Dialogue Manager response menu is visible, then choose a branch and continue.
 
 ## Current limitations
 
 - The main Phase-1 sample still uses `.galscript`; Dialogue Manager has a separate command-bridge sample.
-- Dialogue Manager save/load snapshots currently store resource path, next id, active flag, and presentation state. Before migrating long chapters, add a dedicated DM save/load regression around response-state and mid-choice restore.
+- Dialogue Manager save/load now stores resource path, next id, active flag, current displayed line, current responses, and presentation state; the smoke test covers mid-choice restore. It still needs broader coverage for long-scene mid-line and branch-after-save cases.
 - `VNDirector.gd` still owns command execution; Phase 2 should split UI/presentation components.
 - Command bridge is code-based rather than generated from a central registry.
 
 ## Recommended next step
 
-Proceed with **Phase 2A: migrate one real short scene to `.dialogue`**.
+Proceed with **Phase 2C: migrate one real short scene to `.dialogue` and promote it toward the default start path**.
 
 Acceptance for the next step:
 
 1. A real scene, not just the integration sample, is written in `.dialogue`.
 2. It uses presentation mutations for bg/show/hide/bgm/sfx.
-3. It uses either the phone chain or calendar/affection chain.
-4. It has a save/load smoke covering Dialogue Manager mid-scene and mid-choice state.
+3. It uses either the phone chain or calendar/affection chain, ideally both in separate branches.
+4. It has save/load smoke covering Dialogue Manager mid-scene, mid-choice, and branch-after-save state.
 5. `.galscript` remains as fallback until the DM scene passes equivalent validation.

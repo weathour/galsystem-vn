@@ -8,12 +8,14 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 
 func save_slot(slot_id: int, presentation_state: Dictionary = {}) -> bool:
+	var backend := str(presentation_state.get("dialogue_backend", "galscript"))
 	var payload := {
 		"save_version": SAVE_VERSION,
 		"created_unix": Time.get_unix_time_from_system(),
 		"slot_id": slot_id,
+		"scenario_backend": backend,
 		"vn_state": VNState.snapshot(),
-		"scenario": ScenarioRunner.get_checkpoint(),
+		"scenario": ScenarioRunner.get_checkpoint() if backend == "galscript" else {},
 		"presentation": presentation_state,
 		"phone": PhoneSystem.snapshot() if has_node("/root/PhoneSystem") else {},
 		"calendar": CalendarSystem.snapshot() if has_node("/root/CalendarSystem") else {},
@@ -45,7 +47,14 @@ func load_slot(slot_id: int) -> Dictionary:
 		push_error("SaveSystem: invalid save payload in %s" % path)
 		return {}
 	VNState.restore(payload.get("vn_state", {}))
-	if not ScenarioRunner.restore_checkpoint(payload.get("scenario", {})):
+	var backend := str(payload.get("scenario_backend", payload.get("presentation", {}).get("dialogue_backend", "galscript")))
+	if backend == "dialogue_manager":
+		if has_node("/root/DialogueManagerAdapter"):
+			var dm_state: Dictionary = payload.get("presentation", {}).get("dialogue_manager", {})
+			if not DialogueManagerAdapter.restore(dm_state):
+				push_error("SaveSystem: Dialogue Manager checkpoint restore failed for %s" % path)
+				return {}
+	elif not ScenarioRunner.restore_checkpoint(payload.get("scenario", {})):
 		push_error("SaveSystem: scenario checkpoint restore failed for %s" % path)
 		return {}
 	if has_node("/root/PhoneSystem"):

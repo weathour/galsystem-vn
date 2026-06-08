@@ -11,7 +11,7 @@
 
 This phase delivered a self-built Godot ADV/Galgame vertical slice suitable for exploring long-form games similar to *White Album* and *Steins;Gate*.
 
-The project intentionally does **not** import Dialogue Manager yet. The current `.galscript` runner is a Phase-1 self-built core kept adapter-friendly so it can later be replaced by Dialogue Manager or another dialogue backend.
+Phase 1 originally shipped with a self-built `.galscript` core. Phase 2 has since imported Dialogue Manager v3.10.4 as a second backend while keeping `.galscript` as the fallback path.
 
 ## What is included
 
@@ -34,7 +34,7 @@ The project intentionally does **not** import Dialogue Manager yet. The current 
 
 - `VNState.gd`: centralized story state.
 - `ScenarioRunner.gd`: minimal text-first `.galscript` runner.
-- `SaveSystem.gd`: save/load with payload validation.
+- `SaveSystem.gd`: save/load with payload validation and backend-aware ScenarioRunner/Dialogue Manager restore.
 - `RouteManager.gd`: route/ending arbitration placeholder.
 - `PhoneSystem.gd`: phone/mail trigger prototype.
 - `CalendarSystem.gd`: calendar/affection event prototype.
@@ -128,7 +128,7 @@ These are accepted Phase-1 limitations, not current blockers:
 2. Command contracts are shared by convention across runner/director/lint rather than a central registry.
 3. Phone UI is functional as a prototype, not a final phone interface.
 4. Flow panel is debug visibility, not a full route-map editor.
-5. Dialogue Manager is not imported.
+5. Dialogue Manager is imported and smoke-tested, but the main real chapter still needs migration from `.galscript` to `.dialogue`.
 6. Art/audio assets are placeholders or labels, not final production assets.
 
 ## Recommended Phase 2
@@ -144,7 +144,8 @@ These are accepted Phase-1 limitations, not current blockers:
 3. Extract a shared command registry to reduce drift between runner, director, lint, and documentation.
 4. Expand `FlowchartSystem` into a chapter/route map prototype.
 5. Add a more complete event scheduler for calendar + affection + flags + route conditions.
-6. Re-evaluate Dialogue Manager integration once the command contract and UI component boundaries are stable.
+6. Migrate one real short chapter into `.dialogue` and promote it only after equivalent validation passes.
+7. Continue hardening Dialogue Manager save/load beyond the current mid-choice smoke.
 
 ## Safe continuation rule
 
@@ -166,3 +167,5 @@ Expected key output:
 ```text
 dialogue manager smoke ok
 ```
+
+The Dialogue Manager smoke now covers both branches plus mid-choice save/load restore.
